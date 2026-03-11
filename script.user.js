@@ -23,6 +23,7 @@
 // SPEED: 倍速值，如 1.5 / 2 / 3
 const DEFAULT_SPEED_OPTION = GM_getValue('FORCE_SPEED', false);
 const DEFAULT_SPEED = GM_getValue('SPEED', 2);
+let AUTO_MUTE = GM_getValue('AUTO_MUTE', true);
 
 GM_registerMenuCommand('设置倍速', function () {
     openSettingsDialog();
@@ -31,6 +32,13 @@ GM_registerMenuCommand('切换强制倍速', function () {
     const cur = GM_getValue('FORCE_SPEED', false);
     GM_setValue('FORCE_SPEED', !cur);
     xxtNotify('强制倍速已' + (!cur ? '开启' : '关闭') + '，刷新页面生效', 1);
+});
+GM_registerMenuCommand('切换自动静音', function () {
+    AUTO_MUTE = !AUTO_MUTE;
+    GM_setValue('AUTO_MUTE', AUTO_MUTE);
+    const muteEl = document.getElementById('xxt-mute-switch');
+    if (muteEl) muteEl.checked = AUTO_MUTE;
+    xxtNotify('自动静音已' + (AUTO_MUTE ? '开启' : '关闭'), 1);
 });
 
 console.log('强制倍速选项:', DEFAULT_SPEED_OPTION);
@@ -629,7 +637,7 @@ async function tryStartVideo(videoDiv, launchBtn, paceList, muteBtn) {
     else {
         selectMenuItem(paceList); 
     } 
-    muteVideo(muteBtn);
+    if (AUTO_MUTE) muteVideo(muteBtn);
 }
 
 function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn) {
@@ -1367,6 +1375,12 @@ function injectLayuiCSS() {
         .xxt-layer .layui-layer-btn0:hover{background:#00796b !important;border-color:#00796b !important}
         #xxt-panel.xxt-mini{border-radius:10px;width:auto}
         @keyframes xxt-blink{0%,100%{opacity:1}50%{opacity:.25}}
+        .xxt-switch{position:relative;display:inline-block;width:32px;height:18px;vertical-align:middle}
+        .xxt-switch input{opacity:0;width:0;height:0;position:absolute}
+        .xxt-switch-slider{position:absolute;inset:0;background:#ccc;border-radius:18px;cursor:pointer;transition:background .2s}
+        .xxt-switch-slider::before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
+        .xxt-switch input:checked+.xxt-switch-slider{background:#00897b}
+        .xxt-switch input:checked+.xxt-switch-slider::before{transform:translateX(14px)}
     `;
     document.head.appendChild(style);
 }
@@ -1391,6 +1405,15 @@ function createStatusPanel() {
             <div class="xxt-row">
                 <span class="xxt-lbl">倍速</span>
                 <span class="xxt-val" id="xxt-speed">${DEFAULT_SPEED}x${DEFAULT_SPEED_OPTION ? ' (强制)' : ''}</span>
+            </div>
+            <div class="xxt-row">
+                <span class="xxt-lbl">静音</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-mute-switch" ${AUTO_MUTE ? 'checked' : ''}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
             </div>
         </div>
         <div class="xxt-ft">
@@ -1427,6 +1450,12 @@ function createStatusPanel() {
     el.querySelector('#xxt-toggle').addEventListener('click', function() {
         el.classList.toggle('xxt-mini');
         this.textContent = el.classList.contains('xxt-mini') ? '+' : '—';
+    });
+
+    el.querySelector('#xxt-mute-switch').addEventListener('change', function() {
+        AUTO_MUTE = this.checked;
+        GM_setValue('AUTO_MUTE', AUTO_MUTE);
+        xxtNotify('自动静音已' + (AUTO_MUTE ? '开启' : '关闭'), 1);
     });
 
     el.querySelector('#xxt-set-btn').addEventListener('click', openSettingsDialog);
