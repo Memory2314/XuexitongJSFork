@@ -1387,6 +1387,7 @@ function injectLayuiCSS() {
         .xxt-layer .layui-layer-btn0{background:#00897b !important;border-color:#00897b !important}
         .xxt-layer .layui-layer-btn0:hover{background:#00796b !important;border-color:#00796b !important}
         #xxt-panel.xxt-mini{border-radius:10px;width:auto}
+        #xxt-panel.xxt-mini .xxt-hd{border-radius:10px}
         @keyframes xxt-blink{0%,100%{opacity:1}50%{opacity:.25}}
         .xxt-switch{position:relative;display:inline-block;width:32px;height:18px;vertical-align:middle}
         .xxt-switch input{opacity:0;width:0;height:0;position:absolute}
