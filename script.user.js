@@ -10,6 +10,7 @@
 // @match        *://*.chaoxing.com/mycourse/studentstudy*
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/Memory2314/XuexitongJSFork/main/script.meta.js
@@ -1790,8 +1791,8 @@
             </div>
         </div>
         <div class="xxt-ft">
-            <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">ℹ 关于</button>
-            <button class="layui-btn layui-btn-sm layui-btn-warm" id="xxt-reset-btn">重置授权</button>
+            <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">关于</button>
+            <button class="layui-btn layui-btn-sm layui-btn-warm" id="xxt-reset-btn">重置配置</button>
         </div>
     `;
     document.body.appendChild(el);
@@ -1843,16 +1844,16 @@
     el.querySelector("#xxt-reset-btn").addEventListener("click", function () {
       layui.use("layer", function () {
         layui.layer.confirm(
-          "确定重置启动授权？\n下次打开页面将重新显示确认框。",
+          "确定重置所有配置？",
           {
-            title: "重置授权",
+            title: "重置配置",
             btn: ["确定", "取消"],
             skin: "xxt-layer",
           },
           function (idx) {
-            GM_setValue("XXT_CONFIRMED", false);
+            ["FORCE_SPEED", "SPEED", "AUTO_MUTE", "AUTO_ANSWER", "AUTO_PDF", "AUTO_AUDIO", "XXT_CONFIRMED"].forEach(GM_deleteValue);
             layui.layer.close(idx);
-            xxtNotify("授权已重置", 1);
+            xxtNotify("配置已重置，刷新页面生效", 1);
           },
         );
       });
