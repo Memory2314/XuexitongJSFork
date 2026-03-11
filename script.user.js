@@ -24,6 +24,8 @@
 const DEFAULT_SPEED_OPTION = GM_getValue('FORCE_SPEED', false);
 const DEFAULT_SPEED = GM_getValue('SPEED', 2);
 let AUTO_MUTE = GM_getValue('AUTO_MUTE', true);
+let AUTO_ANSWER = GM_getValue('AUTO_ANSWER', true);
+let AUTO_PDF = GM_getValue('AUTO_PDF', true);
 
 GM_registerMenuCommand('设置倍速', function () {
     openSettingsDialog();
@@ -40,6 +42,20 @@ GM_registerMenuCommand('切换自动静音', function () {
     if (muteEl) muteEl.checked = AUTO_MUTE;
     xxtNotify('自动静音已' + (AUTO_MUTE ? '开启' : '关闭'), 1);
 });
+GM_registerMenuCommand('切换自动答题', function () {
+    AUTO_ANSWER = !AUTO_ANSWER;
+    GM_setValue('AUTO_ANSWER', AUTO_ANSWER);
+    const el = document.getElementById('xxt-answer-switch');
+    if (el) el.checked = AUTO_ANSWER;
+    xxtNotify('自动答题已' + (AUTO_ANSWER ? '开启' : '关闭'), 1);
+});
+GM_registerMenuCommand('切换自动翻页PDF', function () {
+    AUTO_PDF = !AUTO_PDF;
+    GM_setValue('AUTO_PDF', AUTO_PDF);
+    const el = document.getElementById('xxt-pdf-switch');
+    if (el) el.checked = AUTO_PDF;
+    xxtNotify('自动翻页PDF已' + (AUTO_PDF ? '开启' : '关闭'), 1);
+});
 
 console.log('强制倍速选项:', DEFAULT_SPEED_OPTION);
 console.log('默认倍速:', DEFAULT_SPEED);
@@ -49,15 +65,14 @@ const DEFAULT_INTERVAL_TIME = 85 + Math.floor(Math.random() * 30); // 默认轮�
 
 const DEFAULT_TRY_COUNT = 50; // 默认最大尝试次数50次
 
-const COURSE_TREE_ID = 'coursetree'; 
+const COURSE_TREE_ID = 'coursetree';
 const COURSE_TREE_NODE_FEATURE_CLASS = 'div.posCatalog_select';
 const COURSE_TREE_NODE_TITLE_FEATURE_CLASS = 'span.posCatalog_title';
 const COURSE_TREE_NODE_CURRENT_FEATURE_CLASS = 'posCatalog_active';
 const COURSE_TREE_NODE_INTERACT_FEATURE_CLASS = 'span.posCatalog_name';
-const COURSE_TREE_NODE_UNFINISHED_FEATURE_CLASS = '.jobUnfinishCount';
 
 const VIDEO_IFRAME_ID = 'video';
-const VIDEO_QUESTION_ID = 'ext-comp-1046'; 
+const VIDEO_QUESTION_ID = 'ext-comp-1046';
 const VIDEO_QUESTION_COMPLETE_ID = 'videoquiz-continue';
 const VIDEO_QUESTION_SUBMITTING_ID = 'videoquiz-submitting';
 const VIDEO_PLAY_FEATURE_CLASS = '.vjs-play-control';
@@ -78,20 +93,19 @@ const PDF_DOC_FEATURE_CLASS = 'insertdoc-online-pdf';
 
 const IFRAME_LOADING_URL= 'about:blank';
 const NEXTBTN_ID = 'prevNextFocusNext';
-const OUTER_IFRAME_ID = 'iframe'; 
-const INNER_COURSE_IFRAME_ID = 'iframe.ans-attach-online';
+const OUTER_IFRAME_ID = 'iframe';
 const INNER_COURSE_IFRAME_FEATURE_CLASS = 'ans-attach-online';
 const IFRAME_MAIN_FEATURE_CLASS = '.content'; // 适配左右目录布局
 
 
 
 
-let allTaskDown = false; 
+let allTaskDown = false;
 let courseTree = [];
 let courseTreeIndex = 0;
-let nextLock = false; 
+let nextLock = false;
 let skipSign = 0;
-let answerTable = []; 
+let answerTable = [];
 let handleIframeLock = false;
 let nextCooldown = false;
 let videoLock = false; // 视频锁，防止多次点击播放按钮
@@ -137,7 +151,7 @@ function nodeType(node) {
             return 'Block';
 
         } else {
-            const pending = node.querySelector('.orangeNew'); 
+            const pending = node.querySelector('.orangeNew');
             if (pending) {
                 return 'Pending';
             } else {
@@ -151,7 +165,7 @@ function nextCourse() {
     if (courseTreeIndex < courseTree.length) {
         return courseTree[courseTreeIndex++];
     } else {
-        return null; 
+        return null;
     }
 }
 
@@ -163,7 +177,7 @@ function initializeTreeIndex() {
             console.log('已找到当前激活的课程节点:', node.querySelector(COURSE_TREE_NODE_INTERACT_FEATURE_CLASS).title);
             courseTreeIndex--;
             return node.querySelector(COURSE_TREE_NODE_INTERACT_FEATURE_CLASS).title;
-        } 
+        }
     }
     console.error('初始化错误, 未找到激活的课程节点');
 }
@@ -216,7 +230,7 @@ function continueToNextChapter() {
     setTimeout(() => {
         nextCooldown = false;
         console.log('章节跳转冷却结束');
-    }, 10 * DEFAULT_SLEEP_TIME); 
+    }, 10 * DEFAULT_SLEEP_TIME);
 
     const nextBtn = document.getElementById(NEXTBTN_ID);
 
@@ -265,15 +279,15 @@ function continueToNextChapter() {
                         nextLock = false;
                         return;
                     }
-                    skippedCount++; 
+                    skippedCount++;
                 }
-                nextChapter = aimNode.querySelector(COURSE_TREE_NODE_INTERACT_FEATURE_CLASS); 
-                console.log('循环执行完毕，正在跳转到下一课程:', nextChapter.title);           
-            }  
+                nextChapter = aimNode.querySelector(COURSE_TREE_NODE_INTERACT_FEATURE_CLASS);
+                console.log('循环执行完毕，正在跳转到下一课程:', nextChapter.title);
+            }
             if (nextChapter) {
                 timeSleep(DEFAULT_SLEEP_TIME).then(() => {
                     console.log('即将跳转到下一章节');
-                    updatePanelStatus('跳转中', nextChapter.title);
+                    updatePanelStatus('跳转中');
                     nextChapter.click();
                     console.log('已点击章节:', nextChapter.title);
                     nextLock = false;
@@ -358,7 +372,7 @@ function findInnerDocs(outerDoc) {
 
             if (innerDoc.location.href === IFRAME_LOADING_URL) {
                 console.log('[调试] innerDoc 仍为 about:blank, 等待加载');
-                throw new Error('innerDoc 加载中'); 
+                throw new Error('innerDoc 加载中');
             }
         } catch (e) {
             console.warn('[备用] 跨域, 无法访问 iframe 内容');
@@ -400,7 +414,7 @@ function findInnerDocs(outerDoc) {
             console.log('[备用] 未找到 work iframe');
             return null;
         }
-        
+
     }
     console.log('再次核对');
     if (needSkip?.length > 1 && result.length < needSkip.length) {
@@ -491,12 +505,6 @@ function forcePlaybackRate(videoDiv, targetRate = 2.0) {
     };
 }
 
-// 用法示例：
-// const video = document.querySelector('video');
-// forcePlaybackRate(video, 2.0);
-// 用法：对每个 video 调用一次即可
-// const stop = forcePlaybackRate(video, 2.0);
-
 function waitForSubmitAndContinue(innerDoc) {
     return new Promise(resolve => {
         const interval = setInterval(function() {
@@ -527,7 +535,7 @@ function autoQuestionDeal(target, innerDoc) {
     try {
         if (target) {
             let pollCount = 0;
-            const maxPoll = DEFAULT_TRY_COUNT; 
+            const maxPoll = DEFAULT_TRY_COUNT;
             const poll = async () => {
                 if (target.style.visibility === '') {
                     console.log('visi has been changed:', target.style.visibility);
@@ -614,7 +622,7 @@ function findVideoElement(innerDoc) {
         if (videoDiv) {
             return { innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn };
         }
-    }  
+    }
     return null;
 }
 
@@ -635,8 +643,8 @@ async function tryStartVideo(videoDiv, launchBtn, paceList, muteBtn) {
         forcePlaybackRate(videoDiv, DEFAULT_SPEED)
     }
     else {
-        selectMenuItem(paceList); 
-    } 
+        selectMenuItem(paceList);
+    }
     if (AUTO_MUTE) muteVideo(muteBtn);
 }
 
@@ -655,9 +663,9 @@ function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, pa
                 console.log('class 已包含 vjs-ended');
                 observer?.disconnect();
                 resolve(true);
-            } else if (!videoDiv.classList.contains(VIDEO_HAS_LAUNCHED_FEATURE_CLASS)) {       
+            } else if (!videoDiv.classList.contains(VIDEO_HAS_LAUNCHED_FEATURE_CLASS)) {
                 tryStartVideo(videoDiv, launchBtn, paceList, muteBtn);
-                if (target && target.style.visibility !== 'hidden') {
+                if (AUTO_ANSWER && target && target.style.visibility !== 'hidden') {
                             console.log('检测为互动题目,正在处理');
                             autoQuestionDeal(target, innerDoc);
                             pauseFreeze = true;
@@ -672,7 +680,7 @@ function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, pa
                         if (videoDiv.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) { //由于视频结束时有暂停属性，由于延迟会产生分支跳跃到此处的情况，此步为防止一个视频循环播放
                             return;
                         }
-                        if (target && target.style.visibility !== 'hidden') {
+                        if (AUTO_ANSWER && target && target.style.visibility !== 'hidden') {
                             console.log('检测为互动题目,正在处理');
                             autoQuestionDeal(target, innerDoc);
                             pauseFreeze = true;
@@ -708,8 +716,8 @@ function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, pa
                     } else {
                         console.log('暂停状态已自动恢复,无需处理');
                     }
-                }); 
-            } else if (target && target.style.visibility !== 'hidden') {
+                });
+            } else if (AUTO_ANSWER && target && target.style.visibility !== 'hidden') {
                 console.log('检测为互动题目,正在处理');
                 autoQuestionDeal(target, innerDoc);
                 pauseFreeze = true;
@@ -718,7 +726,7 @@ function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, pa
                 }, 10 * DEFAULT_SLEEP_TIME);
             } else {
                 console.log('视频正在播放中，继续检测');
-            } 
+            }
         };
         observer = new MutationObserver(checkClass);
         observer.observe(videoDiv, { attributes: true, attributeFilter: ['class'] });
@@ -739,7 +747,7 @@ function findPdfElement(innerDoc) {
         console.log('[调试] 获取 panView 的 document 失败', e);
         return null;
     }
-    
+
     const pdfHtml = finalDoc.documentElement;
     if (!pdfHtml) {
         console.log('[调试] 未找到 pdf 元素');
@@ -755,7 +763,7 @@ function findPdfElement(innerDoc) {
     return { pdfHtml };
 }
 
-function scrollPdfToBottom(pdfHtml, maxTries = Math.floor(DEFAULT_TRY_COUNT / 10)) { 
+function scrollPdfToBottom(pdfHtml, maxTries = Math.floor(DEFAULT_TRY_COUNT / 10)) {
     return new Promise(async (resolve) => {
         let lastTop = pdfHtml.scrollTop;
         let tries = 0;
@@ -790,7 +798,7 @@ function findWorkElement(innerDoc) {
         console.log('[调试] 获取 frame_content 的 document 失败', e);
         return null;
     }
-    
+
     const testList = testDoc.querySelectorAll('.singleQuesId');
     if (testList.length === 0) {
         console.log('[调试] 未找到任何测试题目');
@@ -873,7 +881,7 @@ function autoFillAnswers(testList, answerJson) {
 
 function answerFixes(testList, answerHistory) {
     console.log('开始修补答案');
-    const answerJson = []; 
+    const answerJson = [];
     testList.forEach(quesDiv => {
         const iTag = quesDiv.querySelector('i');
         const qNum = iTag ? iTag.textContent.trim() : '';
@@ -896,7 +904,7 @@ function answerFixes(testList, answerHistory) {
                 console.log('进入初始化')
                 answerTable[qIndex] = Array(options.length).fill(-1);
             }
-            
+
             if (answerHistory[qIndex]?.some(record => record.mark === 'right')) {
                 answerJson.push({
                     "题号": qNum,
@@ -909,7 +917,7 @@ function answerFixes(testList, answerHistory) {
                     .map(record => record.answer.trim())
                     .flatMap(str => str.includes(',') ? str.split(',').map(s => s.trim()) : str.split(''));
                 ansArr.forEach(ch => {
-                    answerTable[qIndex][ch.charCodeAt(0) - 'A'.charCodeAt(0)] = 1; 
+                    answerTable[qIndex][ch.charCodeAt(0) - 'A'.charCodeAt(0)] = 1;
                 });
             } else {
                 console.log('before修补的answerTable:', answerTable);
@@ -931,8 +939,8 @@ function answerFixes(testList, answerHistory) {
                 if (answerTable[qIndex][i] === -1) {
                     if (tryAnother) {
                         ansStr += options[i].getAttribute('data');
-                        tryAnother = false; 
-                    } 
+                        tryAnother = false;
+                    }
                 } else if (answerTable[qIndex][i] === 1) {
                     ansStr += options[i].getAttribute('data');
                 }
@@ -1076,8 +1084,8 @@ async function handleIframeChange(prama) {
                                         hasEnterdct2 = true;
                                         await timeSleep(DEFAULT_SLEEP_TIME);
                                         handleIframeLock = false; //
-                                        await handleIframeChange(1);  
-                                    }   
+                                        await handleIframeChange(1);
+                                    }
                                     return;
                                 } else {
                                     console.log('此章节学习测验已处理');
@@ -1095,7 +1103,7 @@ async function handleIframeChange(prama) {
                                         hasEnterdct2 = false;
                                         continueToNextChapter();
                                     }
-                                    
+
                                 }
                                 return;
                             }
@@ -1107,13 +1115,13 @@ async function handleIframeChange(prama) {
                             async function runTasksSerially() {
                                 for (const { innerDoc, Type } of InnerDocs) { // for...of 防错乱
                                     console.log(`处理 ${Type} 任务点...`);
-                                    try {    
+                                    try {
                                         if (taskCount >= needSkip.length) {
                                             console.log('已处理完所有任务点，准备跳转到下一章节');
-                                            if (Type === 'Work') prama = 0; 
+                                            if (Type === 'Work') prama = 0;
                                         } else if (needSkip[taskCount].getAttribute('aria-label') === '任务点已完成') {
                                             console.log('任务点已完成，跳过');
-                                            if (Type === 'Work') prama = 0; 
+                                            if (Type === 'Work') prama = 0;
                                         } else if (Type === 'Video') {
                                             console.log('该章节为VIDEO,进行参数捕获');
                                             await new Promise((resolve) => {
@@ -1158,11 +1166,16 @@ async function handleIframeChange(prama) {
                                                             resolve();
                                                             return;
                                                         }
-                                                        const toBottom = await scrollPdfToBottom(pdfHtml);
+                                                        let toBottom = false;
+                                                        if (AUTO_PDF) {
+                                                            toBottom = await scrollPdfToBottom(pdfHtml);
+                                                        }
                                                         if (toBottom) {
                                                             console.log('PDF滚动成功！');
-                                                        } else {
+                                                        } else if (AUTO_PDF) {
                                                             console.warn('PDF多次滚动无效，可能页面未加载完全');
+                                                        } else {
+                                                            console.log('自动翻页PDF已关闭，跳过滚动');
                                                         }
                                                         await timeSleep(2 * DEFAULT_SLEEP_TIME);
                                                         console.log('章节处理完毕');
@@ -1249,7 +1262,7 @@ async function handleIframeChange(prama) {
                                                                 configBtn.click();
                                                                 await timeSleep(DEFAULT_SLEEP_TIME);
                                                                 handleIframeLock = false; //
-                                                                await handleIframeChange(2); 
+                                                                await handleIframeChange(2);
                                                                 return;
                                                             } else {
                                                                 console.log('已成功提交测试题目');
@@ -1266,7 +1279,7 @@ async function handleIframeChange(prama) {
                                                                     hasEnterdct2 = false;
                                                                     continueToNextChapter();
                                                                 }
-                                                                
+
                                                             }
                                                         } else {
                                                             console.warn('课后测验题目需手动完成');
@@ -1275,7 +1288,7 @@ async function handleIframeChange(prama) {
                                                     }
                                                 );
                                             });
-                                            
+
                                         }
                                     } finally {
                                         console.log(`任务点 ${taskCount + 1} / ${needSkip.length} 已处理`);
@@ -1299,13 +1312,13 @@ async function handleIframeChange(prama) {
                                     } else {
                                         // 没有未完成任务点
                                         console.log('所有任务点已完成');
-                                         
+
                                     }
                                     learningTest.click();
                                     hasEnterdct2 = true;
                                     await timeSleep(DEFAULT_SLEEP_TIME);
                                     handleIframeLock = false; //
-                                    await handleIframeChange(1);                                
+                                    await handleIframeChange(1);
                                 } else {
                                     console.log('此章节学习测验已处理');
                                     if (prama !== 2) answerTable = [];
@@ -1318,10 +1331,10 @@ async function handleIframeChange(prama) {
                                     } else {
                                         // 没有未完成任务点
                                         console.log('所有任务点已完成');
-                                    
+
                                     }
-                                    hasEnterdct2 = false;   
-                                    continueToNextChapter();   
+                                    hasEnterdct2 = false;
+                                    continueToNextChapter();
                                 }
                             }
 
@@ -1381,6 +1394,22 @@ function injectLayuiCSS() {
         .xxt-switch-slider::before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
         .xxt-switch input:checked+.xxt-switch-slider{background:#00897b}
         .xxt-switch input:checked+.xxt-switch-slider::before{transform:translateX(14px)}
+        #xxt-panel .xxt-spd-form{flex:1;margin-bottom:0}
+        #xxt-panel .layui-form-select{margin-bottom:0}
+        #xxt-panel .layui-form-select .layui-input{height:26px;line-height:26px;font-size:12px;padding:0 8px;border-color:#e0e0e0;border-radius:4px}
+        #xxt-panel .layui-form-select .layui-edge{top:7px}
+        #xxt-panel .layui-form-select dl{min-width:90px}
+        #xxt-panel .layui-form-select dd{line-height:30px;font-size:12px;padding:0 12px}
+        #xxt-panel .layui-form-select dl dd.layui-this{color:#00897b}
+        #xxt-panel .xxt-notes{background:#fffbf0;border:1px solid #ffe5a0;border-radius:6px;padding:8px 10px;margin-bottom:10px}
+        #xxt-panel .xxt-notes ul{margin:0;padding-left:14px}
+        #xxt-panel .xxt-notes li{font-size:11px;color:#7a6b3a;line-height:1.7;list-style:disc}
+        #xxt-panel .xxt-cfgs{border:1px solid #f0f0f0;border-radius:6px;overflow:hidden;margin-bottom:4px}
+        #xxt-panel .xxt-cfg-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#fff}
+        #xxt-panel .xxt-cfg-item+.xxt-cfg-item{border-top:1px solid #f5f5f5}
+        #xxt-panel .xxt-cfg-lbl{font-size:12px;color:#444;font-weight:500;line-height:1.4}
+        #xxt-panel .xxt-cfg-desc{font-size:11px;color:#bbb;margin-top:1px}
+        #xxt-panel .xxt-cfg-ctrl{flex-shrink:0;margin-left:8px}
     `;
     document.head.appendChild(style);
 }
@@ -1402,11 +1431,24 @@ function createStatusPanel() {
                     <span id="xxt-status">等待启动</span>
                 </span>
             </div>
-            <div class="xxt-row">
+            <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">倍速</span>
-                <span class="xxt-val" id="xxt-speed">${DEFAULT_SPEED}x${DEFAULT_SPEED_OPTION ? ' (强制)' : ''}</span>
+                <div class="layui-form xxt-spd-form" lay-filter="xxt-speed-form">
+                    <select name="speed" lay-filter="xxt-speed">
+                        ${[1, 1.25, 1.5, 2, 3].map(s => `<option value="${s}"${s == DEFAULT_SPEED ? ' selected' : ''}>${s}x</option>`).join('')}
+                    </select>
+                </div>
             </div>
-            <div class="xxt-row">
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">强制</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-force-switch" ${DEFAULT_SPEED_OPTION ? 'checked' : ''}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
+            <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">静音</span>
                 <span class="xxt-val">
                     <label class="xxt-switch">
@@ -1415,10 +1457,28 @@ function createStatusPanel() {
                     </label>
                 </span>
             </div>
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">答题</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-answer-switch" ${AUTO_ANSWER ? 'checked' : ''}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">翻页</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-pdf-switch" ${AUTO_PDF ? 'checked' : ''}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
         </div>
         <div class="xxt-ft">
-            <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-set-btn">⚙ 设置</button>
-            <button class="layui-btn layui-btn-sm" id="xxt-about-btn">ℹ 关于</button>
+            <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">ℹ 关于</button>
+            <button class="layui-btn layui-btn-sm layui-btn-warm" id="xxt-reset-btn">重置授权</button>
         </div>
     `;
     document.body.appendChild(el);
@@ -1452,13 +1512,49 @@ function createStatusPanel() {
         this.textContent = el.classList.contains('xxt-mini') ? '+' : '—';
     });
 
+    layui.use('form', function() {
+        layui.form.render('select', 'xxt-speed-form');
+        layui.form.on('select(xxt-speed)', function(data) {
+            GM_setValue('SPEED', parseFloat(data.value));
+            xxtNotify('倍速已设为 ' + data.value + 'x，刷新页面生效', 6);
+        });
+    });
+
+    el.querySelector('#xxt-reset-btn').addEventListener('click', function() {
+        layui.use('layer', function() {
+            layui.layer.confirm('确定重置启动授权？\n下次打开页面将重新显示确认框。', {
+                title: '重置授权', btn: ['确定', '取消'], skin: 'xxt-layer'
+            }, function(idx) {
+                GM_setValue('XXT_CONFIRMED', false);
+                layui.layer.close(idx);
+                xxtNotify('授权已重置', 1);
+            });
+        });
+    });
+
+    el.querySelector('#xxt-force-switch').addEventListener('change', function() {
+        GM_setValue('FORCE_SPEED', this.checked);
+        xxtNotify('强制倍速已' + (this.checked ? '开启' : '关闭') + '，刷新页面生效', 6);
+    });
+
     el.querySelector('#xxt-mute-switch').addEventListener('change', function() {
         AUTO_MUTE = this.checked;
         GM_setValue('AUTO_MUTE', AUTO_MUTE);
         xxtNotify('自动静音已' + (AUTO_MUTE ? '开启' : '关闭'), 1);
     });
 
-    el.querySelector('#xxt-set-btn').addEventListener('click', openSettingsDialog);
+    el.querySelector('#xxt-answer-switch').addEventListener('change', function() {
+        AUTO_ANSWER = this.checked;
+        GM_setValue('AUTO_ANSWER', AUTO_ANSWER);
+        xxtNotify('自动答题已' + (AUTO_ANSWER ? '开启' : '关闭'), 1);
+    });
+
+    el.querySelector('#xxt-pdf-switch').addEventListener('change', function() {
+        AUTO_PDF = this.checked;
+        GM_setValue('AUTO_PDF', AUTO_PDF);
+        xxtNotify('自动翻页PDF已' + (AUTO_PDF ? '开启' : '关闭'), 1);
+    });
+
     el.querySelector('#xxt-about-btn').addEventListener('click', function() {
         xxtDialog(
             '<div style="text-align:center;padding:4px 0">' +
@@ -1641,7 +1737,7 @@ function main() {
             skipSign++;
             if(skipSign % 2 === 0) {
                 handleIframeLock = false; // 每次检测到变动后解锁
-                handleIframeChange(3); 
+                handleIframeChange(3);
             }
         });
         leftObserver.observe(leftEl, { childList: true, subtree: true });
@@ -1672,7 +1768,7 @@ initializeTreeIndex();
 createStatusPanel(); // 创建 Layui 状态面板
 
 if (DEFAULT_SPEED_OPTION) {
-    console.log('强制速度模式已开启,目前倍速为:', DEFAULT_SPEED);  
+    console.log('强制速度模式已开启,目前倍速为:', DEFAULT_SPEED);
 } else {
     console.log('未开启强制速度模式');
 }
