@@ -736,7 +736,10 @@
       async function waitForDuration() {
         if (audioEl.readyState >= 1 && audioEl.duration > 0) return;
         await new Promise((r) => {
-          if (audioEl.readyState >= 1) { r(); return; }
+          if (audioEl.readyState >= 1) {
+            r();
+            return;
+          }
           audioEl.addEventListener("loadedmetadata", r, { once: true });
         });
       }
@@ -1699,6 +1702,8 @@
         #xxt-panel .xxt-ft .layui-btn{flex:1;font-size:12px;margin:0}
         #xxt-panel.xxt-mini .xxt-bd,#xxt-panel.xxt-mini .xxt-ft{display:none}
         .xxt-layer .layui-layer-title{background:#00897b;color:#fff;border:none}
+        .xxt-layer .layui-layer-close{color:#fff !important;opacity:.85}
+        .xxt-layer .layui-layer-close:hover{opacity:1}
         .xxt-layer .layui-layer-btn0{background:#00897b !important;border-color:#00897b !important}
         .xxt-layer .layui-layer-btn0:hover{background:#00796b !important;border-color:#00796b !important}
         #xxt-panel.xxt-mini{border-radius:10px;width:auto}
@@ -1904,21 +1909,32 @@
       xxtNotify("自动翻页PDF已" + (AUTO_PDF ? "开启" : "关闭"), 1);
     });
 
-    el.querySelector("#xxt-audio-switch").addEventListener("change", function () {
-      AUTO_AUDIO = this.checked;
-      GM_setValue("AUTO_AUDIO", AUTO_AUDIO);
-      xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 1);
-    });
+    el.querySelector("#xxt-audio-switch").addEventListener(
+      "change",
+      function () {
+        AUTO_AUDIO = this.checked;
+        GM_setValue("AUTO_AUDIO", AUTO_AUDIO);
+        xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 1);
+      },
+    );
 
     el.querySelector("#xxt-about-btn").addEventListener("click", function () {
-      xxtDialog(
-        '<div style="text-align:center;padding:4px 0">' +
-          '<div style="font-size:16px;font-weight:700;margin-bottom:10px">学习通一键全自动刷课助手</div>' +
-          '<div style="color:#666;line-height:2">版本：1.0<br>作者：Memory2314<br>' +
-          '<a href="https://github.com/Memory2314/XuexitongJSFork" target="_blank" style="color:#00897b;font-size:12px">项目地址 GitHub</a><br>' +
-          '<span style="color:#f44336;font-size:12px">⚠ 仅供学习交流，请遵守相关法律法规</span></div></div>',
-        "关于",
-      );
+      layui.use("layer", function () {
+        layui.layer.open({
+          type: 1,
+          title: "关于",
+          btn: false,
+          closeBtn: 1,
+          area: "380px",
+          skin: "xxt-layer",
+          content:
+            '<div style="text-align:center;padding:16px 0">' +
+            '<div style="font-size:16px;font-weight:700;margin-bottom:10px">学习通一键全自动刷课助手</div>' +
+            '<div style="color:#666;line-height:2">版本:1.0<br>' +
+            '<a href="https://github.com/Memory2314/XuexitongJSFork" target="_blank" style="color:#00897b;font-size:12px">在 GitHub 查看源码</a><br>' +
+            "</div></div>",
+        });
+      });
     });
   }
 
