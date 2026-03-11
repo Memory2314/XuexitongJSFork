@@ -28,6 +28,7 @@
   let AUTO_MUTE = GM_getValue("AUTO_MUTE", true);
   let AUTO_ANSWER = GM_getValue("AUTO_ANSWER", true);
   let AUTO_PDF = GM_getValue("AUTO_PDF", true);
+  let AUTO_AUDIO = GM_getValue("AUTO_AUDIO", true);
 
   GM_registerMenuCommand("设置倍速", function () {
     openSettingsDialog();
@@ -57,6 +58,13 @@
     const el = document.getElementById("xxt-pdf-switch");
     if (el) el.checked = AUTO_PDF;
     xxtNotify("自动翻页PDF已" + (AUTO_PDF ? "开启" : "关闭"), 1);
+  });
+  GM_registerMenuCommand("切换自动播放音频", function () {
+    AUTO_AUDIO = !AUTO_AUDIO;
+    GM_setValue("AUTO_AUDIO", AUTO_AUDIO);
+    const el = document.getElementById("xxt-audio-switch");
+    if (el) el.checked = AUTO_AUDIO;
+    xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 2);
   });
 
   console.log("强制倍速选项:", DEFAULT_SPEED_OPTION);
@@ -94,6 +102,10 @@
 
   const PDF_IFRAME_ID = "panView";
   const PDF_DOC_FEATURE_CLASS = "insertdoc-online-pdf";
+
+  const AUDIO_IFRAME_FEATURE_CLASS = "ans-insertaudio";
+  const AUDIO_PLAYER_ID = "audio";
+  const AUDIO_ELEMENT_ID = "audio_html5_api";
 
   const IFRAME_LOADING_URL = "about:blank";
   const NEXTBTN_ID = "prevNextFocusNext";
@@ -394,6 +406,8 @@
         Type = "Video";
       } else if (innerIframe.classList.contains(PDF_DOC_FEATURE_CLASS)) {
         Type = "Pdf";
+      } else if (innerIframe.classList.contains(AUDIO_IFRAME_FEATURE_CLASS)) {
+        Type = "Audio";
       } else if (innerIframe.src?.includes("/ananas/modules/work/")) {
         Type = "Work";
       } else {
@@ -689,6 +703,73 @@
       }
     }
     return null;
+  }
+
+  function findAudioElement(innerDoc) {
+    const audioDiv = innerDoc.getElementById(AUDIO_PLAYER_ID);
+    if (!audioDiv) {
+      console.log("[调试] 未找到 audio 元素");
+      return null;
+    }
+    const audioEl = innerDoc.getElementById(AUDIO_ELEMENT_ID);
+    const playControlBtn = innerDoc.querySelector(VIDEO_PLAY_FEATURE_CLASS);
+    console.log("该章节为audio,进行参数捕获", audioDiv);
+    return { audioDiv, audioEl, playControlBtn };
+  }
+
+  async function autoPlayAudio(audioDiv, audioEl, playControlBtn) {
+    return new Promise(async (resolve) => {
+      if (!audioDiv || !audioEl) {
+        resolve(false);
+        return;
+      }
+      if (audioDiv.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) {
+        resolve(true);
+        return;
+      }
+      audioEl.addEventListener("ended", function handler() {
+        audioEl.removeEventListener("ended", handler);
+        resolve(true);
+      });
+
+      // 等待元数据加载（duration 可用）
+      async function waitForDuration() {
+        if (audioEl.readyState >= 1 && audioEl.duration > 0) return;
+        await new Promise((r) => {
+          if (audioEl.readyState >= 1) { r(); return; }
+          audioEl.addEventListener("loadedmetadata", r, { once: true });
+        });
+      }
+
+      // 先尝试静音播放绕过自动播放策略，再跳到结尾
+      audioEl.muted = true;
+      try {
+        await audioEl.play();
+        await waitForDuration();
+        if (audioEl.duration > 0 && !isNaN(audioEl.duration)) {
+          audioEl.currentTime = audioEl.duration - 0.1;
+        }
+        return;
+      } catch (e) {
+        console.warn("音频静音自动播放失败，回退到点击播放按钮", e);
+      }
+
+      // 回退：点击播放按钮
+      if (playControlBtn) playControlBtn.click();
+      for (let i = 0; i < DEFAULT_TRY_COUNT; i++) {
+        await timeSleep(DEFAULT_SLEEP_TIME);
+        if (
+          audioEl.duration > 0 &&
+          !isNaN(audioEl.duration) &&
+          !audioEl.paused
+        ) {
+          audioEl.currentTime = audioEl.duration - 0.1;
+          return;
+        }
+      }
+      console.warn("音频未能正常播放，超时");
+      resolve(false);
+    });
   }
 
   async function tryStartVideo(videoDiv, launchBtn, paceList, muteBtn) {
@@ -1352,6 +1433,34 @@
                               },
                             );
                           });
+                        } else if (Type === "Audio") {
+                          console.log("该章节为AUDIO,进行参数捕获");
+                          if (!AUTO_AUDIO) {
+                            console.log("自动播放音频已关闭，跳过");
+                          } else {
+                            await new Promise((resolve) => {
+                              if (thirdLayerCancel) thirdLayerCancel();
+                              thirdLayerCancel = waitForElement(
+                                () => findAudioElement(innerDoc),
+                                async (innerParam) => {
+                                  if (!innerParam) {
+                                    console.warn("页面异常加载，尝试跳过");
+                                    resolve();
+                                    return;
+                                  }
+                                  const { audioDiv, audioEl, playControlBtn } =
+                                    innerParam;
+                                  await autoPlayAudio(
+                                    audioDiv,
+                                    audioEl,
+                                    playControlBtn,
+                                  );
+                                  await timeSleep(DEFAULT_SLEEP_TIME);
+                                  resolve();
+                                },
+                              );
+                            });
+                          }
                         } else if (Type === "Work") {
                           console.log("该章节为WORK,进行参数捕获");
                           await new Promise((resolve) => {
@@ -1682,6 +1791,15 @@
                     </label>
                 </span>
             </div>
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">音频播放</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-audio-switch" ${AUTO_AUDIO ? "checked" : ""}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
         </div>
         <div class="xxt-ft">
             <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">ℹ 关于</button>
@@ -1780,6 +1898,12 @@
       AUTO_PDF = this.checked;
       GM_setValue("AUTO_PDF", AUTO_PDF);
       xxtNotify("自动翻页PDF已" + (AUTO_PDF ? "开启" : "关闭"), 1);
+    });
+
+    el.querySelector("#xxt-audio-switch").addEventListener("change", function () {
+      AUTO_AUDIO = this.checked;
+      GM_setValue("AUTO_AUDIO", AUTO_AUDIO);
+      xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 1);
     });
 
     el.querySelector("#xxt-about-btn").addEventListener("click", function () {
