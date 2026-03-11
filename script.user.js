@@ -1679,7 +1679,7 @@
     }
     const style = document.createElement("style");
     style.textContent = `
-        #xxt-panel{position:fixed;top:20px;right:20px;width:264px;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:2147483646;font-family:"微软雅黑",sans-serif;font-size:13px;user-select:none;transition:box-shadow .2s}
+        #xxt-panel{position:fixed;top:20px;right:20px;width:264px;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:9999;font-family:"微软雅黑",sans-serif;font-size:13px;user-select:none;transition:box-shadow .2s}
         #xxt-panel:hover{box-shadow:0 8px 32px rgba(0,0,0,.22)}
         #xxt-panel .xxt-hd{background:linear-gradient(135deg,#00897b,#26a69a);color:#fff;padding:10px 14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;cursor:move}
         #xxt-panel .xxt-hd-title{font-size:14px;font-weight:700;letter-spacing:.3px}
@@ -1710,13 +1710,9 @@
         .xxt-switch-slider::before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
         .xxt-switch input:checked+.xxt-switch-slider{background:#00897b}
         .xxt-switch input:checked+.xxt-switch-slider::before{transform:translateX(14px)}
-        #xxt-panel .xxt-spd-form{flex:1;margin-bottom:0}
-        #xxt-panel .layui-form-select{margin-bottom:0}
-        #xxt-panel .layui-form-select .layui-input{height:26px;line-height:26px;font-size:12px;padding:0 8px;border-color:#e0e0e0;border-radius:4px}
-        #xxt-panel .layui-form-select .layui-edge{top:7px}
-        #xxt-panel .layui-form-select dl{min-width:90px}
-        #xxt-panel .layui-form-select dd{line-height:30px;font-size:12px;padding:0 12px}
-        #xxt-panel .layui-form-select dl dd.layui-this{color:#00897b}
+        #xxt-panel .xxt-spd-link{color:#333;font-size:12px;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;gap:3px}
+        #xxt-panel .xxt-spd-link:hover{color:#00897b}
+        #xxt-panel .xxt-spd-link i{font-size:10px}
         #xxt-panel .xxt-notes{background:#fffbf0;border:1px solid #ffe5a0;border-radius:6px;padding:8px 10px;margin-bottom:10px}
         #xxt-panel .xxt-notes ul{margin:0;padding-left:14px}
         #xxt-panel .xxt-notes li{font-size:11px;color:#7a6b3a;line-height:1.7;list-style:disc}
@@ -1749,11 +1745,12 @@
             </div>
             <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">播放倍速</span>
-                <div class="layui-form xxt-spd-form" lay-filter="xxt-speed-form">
-                    <select name="speed" lay-filter="xxt-speed">
-                        ${[1, 1.25, 1.5, 2, 3].map((s) => `<option value="${s}"${s == DEFAULT_SPEED ? " selected" : ""}>${s}x</option>`).join("")}
-                    </select>
-                </div>
+                <span class="xxt-val">
+                    <a href="javascript:;" id="xxt-speed-dropdown" class="xxt-spd-link">
+                        <span id="xxt-speed-text">${DEFAULT_SPEED}x</span>
+                        <i class="layui-icon layui-icon-down layui-font-12"></i>
+                    </a>
+                </span>
             </div>
             <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">强制倍速</span>
@@ -1839,11 +1836,16 @@
       this.textContent = el.classList.contains("xxt-mini") ? "+" : "—";
     });
 
-    layui.use("form", function () {
-      layui.form.render("select", "xxt-speed-form");
-      layui.form.on("select(xxt-speed)", function (data) {
-        GM_setValue("SPEED", parseFloat(data.value));
-        xxtNotify("倍速已设为 " + data.value + "x，刷新页面生效", 6);
+    layui.use("dropdown", function () {
+      layui.dropdown.render({
+        elem: "#xxt-speed-dropdown",
+        data: [1, 1.25, 1.5, 2, 3].map((s) => ({ title: s + "x", id: s })),
+        style: "z-index: 10000;",
+        click: function (obj) {
+          GM_setValue("SPEED", parseFloat(obj.id));
+          document.getElementById("xxt-speed-text").textContent = obj.title;
+          xxtNotify("倍速已设为 " + obj.title + "，刷新页面生效", 6);
+        },
       });
     });
 
@@ -2061,7 +2063,7 @@
       // Layui 未加载时回退到原始方案
       const mask = document.createElement("div");
       mask.style.cssText =
-        "position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:99999;background:rgba(0,0,0,0);cursor:pointer";
+        "position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:9998;background:rgba(0,0,0,0);cursor:pointer";
       document.body.appendChild(mask);
       if (
         confirm(
