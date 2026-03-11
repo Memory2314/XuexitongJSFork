@@ -258,7 +258,6 @@
 
     if (nextBtn) {
       if (nextBtn.style.display === "none") {
-        updatePanelStatus("已全部完成");
         xxtDialog("🎉 所有课程已完成！", "完成");
         allTaskDown = true;
         nextLock = false;
@@ -307,7 +306,6 @@
             console.log("执行章节跳转循环中...");
             aimNode = nextCourse();
             if (!aimNode) {
-              updatePanelStatus("已全部完成");
               xxtDialog(
                 "未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。",
                 "结束",
@@ -326,13 +324,11 @@
         if (nextChapter) {
           timeSleep(DEFAULT_SLEEP_TIME).then(() => {
             console.log("即将跳转到下一章节");
-            updatePanelStatus("跳转中");
             nextChapter.click();
             console.log("已点击章节:", nextChapter.title);
             nextLock = false;
           });
         } else {
-          updatePanelStatus("已全部完成");
           xxtDialog(
             "未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。",
             "结束",
@@ -341,13 +337,11 @@
           nextLock = false;
         }
       } else {
-        updatePanelStatus("已全部完成");
         xxtDialog("🎉 所有课程已完成！", "完成");
         allTaskDown = true;
         nextLock = false;
       }
     } else {
-      updatePanelStatus("已全部完成");
       xxtDialog(
         "未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。",
         "结束",
@@ -1669,7 +1663,6 @@
 
   // ========== Layui UI 面板 ==========
 
-  let xxtPanelEl = null;
   let _settingDialogOpen = false;
 
   function injectLayuiCSS() {
@@ -1741,13 +1734,6 @@
             <span class="xxt-hd-btn" id="xxt-toggle" title="折叠 / 展开"><i class="layui-icon layui-icon-up"></i></span>
         </div>
         <div class="xxt-bd">
-            <div class="xxt-row">
-                <span class="xxt-lbl">状态</span>
-                <span class="xxt-val" style="display:flex;align-items:center">
-                    <span class="xxt-dot wait" id="xxt-dot"></span>
-                    <span id="xxt-status">等待启动</span>
-                </span>
-            </div>
             <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">播放倍速</span>
                 <span class="xxt-val">
@@ -1809,8 +1795,6 @@
         </div>
     `;
     document.body.appendChild(el);
-    xxtPanelEl = el;
-
     // 拖拽
     let sx, sy, ox, oy;
     el.querySelector("#xxt-drag").addEventListener("mousedown", function (e) {
@@ -1961,20 +1945,6 @@
     }
   }
 
-  function updatePanelStatus(status) {
-    if (!xxtPanelEl) return;
-    const dot = document.getElementById("xxt-dot");
-    const statusEl = document.getElementById("xxt-status");
-    if (statusEl) statusEl.textContent = status;
-    if (dot) {
-      dot.className = "xxt-dot";
-      if (/运行|播放|处理|跳转/.test(status)) dot.classList.add("run");
-      else if (status === "已全部完成") dot.classList.add("done");
-      else if (/错误|异常/.test(status)) dot.classList.add("err");
-      else dot.classList.add("wait");
-    }
-  }
-
   function openSettingsDialog() {
     if (_settingDialogOpen) return;
     _settingDialogOpen = true;
@@ -2073,7 +2043,6 @@
     // 启动脚本，已授权则直接运行，否则显示确认对话框
     // 已授权过则跳过确认，直接运行
     if (GM_getValue("XXT_CONFIRMED", false)) {
-      updatePanelStatus("运行中");
       mainFunc();
       return;
     }
@@ -2117,7 +2086,6 @@
         function (index) {
           layer.close(index);
           GM_setValue("XXT_CONFIRMED", true);
-          updatePanelStatus("运行中");
           mainFunc();
         },
       );
@@ -2126,7 +2094,6 @@
 
   function main() {
     console.log("脚本已启动, 开始刷课...");
-    updatePanelStatus("运行中");
 
     const leftEl = document.querySelector(IFRAME_MAIN_FEATURE_CLASS);
     if (leftEl) {
