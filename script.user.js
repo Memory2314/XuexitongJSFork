@@ -1733,7 +1733,7 @@
     el.innerHTML = `
         <div class="xxt-hd" id="xxt-drag">
             <span class="xxt-hd-title">📚 刷课助手</span>
-            <span class="xxt-hd-btn" id="xxt-toggle" title="折叠 / 展开">—</span>
+            <span class="xxt-hd-btn" id="xxt-toggle" title="折叠 / 展开"><i class="layui-icon layui-icon-up"></i></span>
         </div>
         <div class="xxt-bd">
             <div class="xxt-row">
@@ -1833,7 +1833,9 @@
     // 折叠/展开
     el.querySelector("#xxt-toggle").addEventListener("click", function () {
       el.classList.toggle("xxt-mini");
-      this.textContent = el.classList.contains("xxt-mini") ? "+" : "—";
+      this.querySelector("i").className = el.classList.contains("xxt-mini")
+        ? "layui-icon layui-icon-down"
+        : "layui-icon layui-icon-up";
     });
 
     layui.use("dropdown", function () {
