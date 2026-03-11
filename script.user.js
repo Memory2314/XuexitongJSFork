@@ -12,6 +12,7 @@
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
+// @require      https://cdn.jsdelivr.net/npm/layui@2.13.4/dist/layui.js
 // ==/UserScript==
 
 (function () {
@@ -24,13 +25,12 @@ const DEFAULT_SPEED_OPTION = GM_getValue('FORCE_SPEED', false);
 const DEFAULT_SPEED = GM_getValue('SPEED', 2);
 
 GM_registerMenuCommand('设置倍速', function () {
-    const v = prompt('请输入倍速（如 1.5 / 2 / 3）：', GM_getValue('SPEED', 2));
-    if (v !== null && !isNaN(parseFloat(v))) { GM_setValue('SPEED', parseFloat(v)); alert('已设置倍速为 ' + v + '，刷新页面生效'); }
+    openSettingsDialog();
 });
 GM_registerMenuCommand('切换强制倍速', function () {
     const cur = GM_getValue('FORCE_SPEED', false);
     GM_setValue('FORCE_SPEED', !cur);
-    alert('强制倍速已' + (!cur ? '开启' : '关闭') + '，刷新页面生效');
+    xxtNotify('强制倍速已' + (!cur ? '开启' : '关闭') + '，刷新页面生效', 1);
 });
 
 console.log('强制倍速选项:', DEFAULT_SPEED_OPTION);
@@ -214,7 +214,8 @@ function continueToNextChapter() {
 
     if (nextBtn) {
         if (nextBtn.style.display === 'none') {
-            confirm('课程已完成');
+            updatePanelStatus('已全部完成');
+            xxtDialog('🎉 所有课程已完成！', '完成');
             allTaskDown = true;
             nextLock = false;
             return;
@@ -250,9 +251,10 @@ function continueToNextChapter() {
                     console.log('执行章节跳转循环中...')
                     aimNode = nextCourse();
                     if(!aimNode) {
-                        confirm('未找到下一个课程节点, 可能是课程已全部完成或结构异常,脚本已退出');
+                        updatePanelStatus('已全部完成');
+                        xxtDialog('未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。', '结束');
                         allTaskDown = true;
-                        nextLock = false; 
+                        nextLock = false;
                         return;
                     }
                     skippedCount++; 
@@ -261,26 +263,30 @@ function continueToNextChapter() {
                 console.log('循环执行完毕，正在跳转到下一课程:', nextChapter.title);           
             }  
             if (nextChapter) {
-                timeSleep(DEFAULT_SLEEP_TIME).then(() => { 
+                timeSleep(DEFAULT_SLEEP_TIME).then(() => {
                     console.log('即将跳转到下一章节');
+                    updatePanelStatus('跳转中', nextChapter.title);
                     nextChapter.click();
                     console.log('已点击章节:', nextChapter.title);
-                    nextLock = false; 
+                    nextLock = false;
                 });
             } else {
-                confirm('未找到下一个课程节点, 可能是课程已全部完成或结构异常,脚本已退出');
+                updatePanelStatus('已全部完成');
+                xxtDialog('未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。', '结束');
                 allTaskDown = true;
-                nextLock = false; 
+                nextLock = false;
             }
         } else {
-            confirm('课程已完成');
+            updatePanelStatus('已全部完成');
+            xxtDialog('🎉 所有课程已完成！', '完成');
             allTaskDown = true;
-            nextLock = false; 
+            nextLock = false;
         }
     } else {
-        confirm('未找到下一个课程节点, 可能是课程已全部完成或结构异常,脚本已退出');
+        updatePanelStatus('已全部完成');
+        xxtDialog('未找到下一个课程节点，可能是课程已全部完成或结构异常，脚本已退出。', '结束');
         allTaskDown = true;
-        nextLock = false; 
+        nextLock = false;
     }
 }
 
@@ -929,7 +935,7 @@ function answerFixes(testList, answerHistory) {
                     "答案": ansStr
                 });
             } else {
-                confirm(`题号${qNum}未找到任何有效答案`);
+                xxtNotify(`题号 ${qNum} 未找到任何有效答案`, 2);
             }
 
         } else if (type === 'judge') { // 判断题
@@ -953,7 +959,7 @@ function answerFixes(testList, answerHistory) {
                         "答案": ansStr
                     });
                 } else {
-                    confirm(`题号${qNum}未找到任何有效答案`);
+                    xxtNotify(`题号 ${qNum} 未找到任何有效答案`, 2);
                 }
             }
         } else { // 单选题
@@ -983,7 +989,7 @@ function answerFixes(testList, answerHistory) {
                 } else {
                     console.log('copy:', copy);
                     console.log('ansStr:', ansStr);
-                    confirm(`题号${qNum}未找到任何有效答案`);
+                    xxtNotify(`题号 ${qNum} 未找到任何有效答案`, 2);
                 }
             }
         }
@@ -1206,7 +1212,7 @@ async function handleIframeChange(prama) {
                                                             //confirm('[调试],已获取到答案历史，准备修补');
                                                             let answerJson = answerFixes(testList, answerHistory);
                                                             if (answerJson.length === 0) {
-                                                                confirm('fix答案失败');
+                                                                xxtNotify('答案修补失败，请手动处理', 2);
                                                                 resolve();
                                                                 return;
                                                             } else {
@@ -1322,31 +1328,284 @@ async function handleIframeChange(prama) {
     })();
 }
 
-function startScriptWithMask(mainFunc) { // 启动脚本并创建遮罩，因为只有用户主动激活主页面脚本才能正常运行
-    // 创建全屏透明遮罩
-    const mask = document.createElement('div');
-    mask.style.position = 'fixed';
-    mask.style.left = 0;
-    mask.style.top = 0;
-    mask.style.width = '100vw';
-    mask.style.height = '100vh';
-    mask.style.zIndex = 99999;
-    mask.style.background = 'rgba(0,0,0,0)';
-    mask.style.cursor = 'pointer';
-    mask.title = '启动器';
-    document.body.appendChild(mask);
+// ========== Layui UI 面板 ==========
 
-    confirm('本脚本仅供学习交流使用, 请遵守相关法律法规。\n\n请先关闭浏览器的开发者工具, 点击确定后单击页面任意处以运行脚本。\n\n如果想停止脚本, 随时刷新页面即可。');
+let xxtPanelEl = null;
+let _settingDialogOpen = false;
 
-    mask.addEventListener('click', function () { 
-        document.body.removeChild(mask);
+function injectLayuiCSS() {
+    if (!document.querySelector('link[href*="layui"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href =
+          "https://cdn.jsdelivr.net/npm/layui@2.13.4/dist/css/layui.css";
+        document.head.appendChild(link);
+    }
+    const style = document.createElement('style');
+    style.textContent = `
+        #xxt-panel{position:fixed;top:20px;right:20px;width:264px;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:2147483646;font-family:"微软雅黑",sans-serif;font-size:13px;user-select:none;transition:box-shadow .2s}
+        #xxt-panel:hover{box-shadow:0 8px 32px rgba(0,0,0,.22)}
+        #xxt-panel .xxt-hd{background:linear-gradient(135deg,#00897b,#26a69a);color:#fff;padding:10px 14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;cursor:move}
+        #xxt-panel .xxt-hd-title{font-size:14px;font-weight:700;letter-spacing:.3px}
+        #xxt-panel .xxt-hd-btn{cursor:pointer;font-size:16px;line-height:1;opacity:.85;padding:2px 4px;border-radius:3px;transition:background .2s}
+        #xxt-panel .xxt-hd-btn:hover{opacity:1;background:rgba(255,255,255,.25)}
+        #xxt-panel .xxt-bd{padding:12px 14px 8px}
+        #xxt-panel .xxt-row{display:flex;align-items:flex-start;margin-bottom:8px;line-height:1.6}
+        #xxt-panel .xxt-lbl{color:#999;min-width:42px;flex-shrink:0;font-size:12px;padding-top:2px}
+        #xxt-panel .xxt-val{color:#333;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:175px}
+        #xxt-panel .xxt-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;flex-shrink:0;background:#bbb;transition:background .3s}
+        #xxt-panel .xxt-dot.run{background:#4caf50;animation:xxt-blink 1.5s infinite}
+        #xxt-panel .xxt-dot.wait{background:#ff9800}
+        #xxt-panel .xxt-dot.done{background:#2196f3}
+        #xxt-panel .xxt-dot.err{background:#f44336}
+        #xxt-panel .xxt-divider{height:1px;background:#f0f0f0;margin:4px 0 10px}
+        #xxt-panel .xxt-ft{padding:8px 14px 12px;display:flex;gap:8px}
+        #xxt-panel .xxt-ft .layui-btn{flex:1;font-size:12px;margin:0}
+        #xxt-panel.xxt-mini .xxt-bd,#xxt-panel.xxt-mini .xxt-ft{display:none}
+        .xxt-layer .layui-layer-title{background:#00897b;color:#fff;border:none}
+        .xxt-layer .layui-layer-btn0{background:#00897b !important;border-color:#00897b !important}
+        .xxt-layer .layui-layer-btn0:hover{background:#00796b !important;border-color:#00796b !important}
+        #xxt-panel.xxt-mini{border-radius:10px;width:auto}
+        @keyframes xxt-blink{0%,100%{opacity:1}50%{opacity:.25}}
+    `;
+    document.head.appendChild(style);
+}
+
+function createStatusPanel() {
+    injectLayuiCSS();
+    const el = document.createElement('div');
+    el.id = 'xxt-panel';
+    el.innerHTML = `
+        <div class="xxt-hd" id="xxt-drag">
+            <span class="xxt-hd-title">📚 刷课助手</span>
+            <span class="xxt-hd-btn" id="xxt-toggle" title="折叠 / 展开">—</span>
+        </div>
+        <div class="xxt-bd">
+            <div class="xxt-row">
+                <span class="xxt-lbl">状态</span>
+                <span class="xxt-val" style="display:flex;align-items:center">
+                    <span class="xxt-dot wait" id="xxt-dot"></span>
+                    <span id="xxt-status">等待启动</span>
+                </span>
+            </div>
+            <div class="xxt-row">
+                <span class="xxt-lbl">倍速</span>
+                <span class="xxt-val" id="xxt-speed">${DEFAULT_SPEED}x${DEFAULT_SPEED_OPTION ? ' (强制)' : ''}</span>
+            </div>
+        </div>
+        <div class="xxt-ft">
+            <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-set-btn">⚙ 设置</button>
+            <button class="layui-btn layui-btn-sm" id="xxt-about-btn">ℹ 关于</button>
+        </div>
+    `;
+    document.body.appendChild(el);
+    xxtPanelEl = el;
+
+    // 拖拽
+    let sx, sy, ox, oy;
+    el.querySelector('#xxt-drag').addEventListener('mousedown', function(e) {
+        sx = e.clientX; sy = e.clientY;
+        const r = el.getBoundingClientRect();
+        ox = r.left; oy = r.top;
+        el.style.right = 'auto';
+        el.style.left = ox + 'px';
+        el.style.top = oy + 'px';
+        const mv = e2 => {
+            el.style.left = (ox + e2.clientX - sx) + 'px';
+            el.style.top = (oy + e2.clientY - sy) + 'px';
+        };
+        const up = () => {
+            document.removeEventListener('mousemove', mv);
+            document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', mv);
+        document.addEventListener('mouseup', up);
+        e.preventDefault();
+    });
+
+    // 折叠/展开
+    el.querySelector('#xxt-toggle').addEventListener('click', function() {
+        el.classList.toggle('xxt-mini');
+        this.textContent = el.classList.contains('xxt-mini') ? '+' : '—';
+    });
+
+    el.querySelector('#xxt-set-btn').addEventListener('click', openSettingsDialog);
+    el.querySelector('#xxt-about-btn').addEventListener('click', function() {
+        xxtDialog(
+            '<div style="text-align:center;padding:4px 0">' +
+            '<div style="font-size:16px;font-weight:700;margin-bottom:10px">学习通一键全自动刷课助手</div>' +
+            '<div style="color:#666;line-height:2">版本：1.2.2<br>作者：Memory2314<br>' +
+            '<span style="color:#f44336;font-size:12px">⚠ 仅供学习交流，请遵守相关法律法规</span></div></div>',
+            '关于'
+        );
+    });
+}
+
+function xxtNotify(msg, icon) {
+    if (typeof layui !== 'undefined') {
+        layui.use('layer', function() {
+            layui.layer.msg(msg, { icon: icon || 6, time: 3000 });
+        });
+    }
+}
+
+function xxtDialog(msg, title) {
+    if (typeof layui !== 'undefined') {
+        layui.use('layer', function() {
+            layui.layer.alert(msg, { title: title || '提示', btn: ['确定'], area: '380px', skin: 'xxt-layer' });
+        });
+    } else {
+        alert(msg);
+    }
+}
+
+function updatePanelStatus(status) {
+    if (!xxtPanelEl) return;
+    const dot = document.getElementById('xxt-dot');
+    const statusEl = document.getElementById('xxt-status');
+    if (statusEl) statusEl.textContent = status;
+    if (dot) {
+        dot.className = 'xxt-dot';
+        if (/运行|播放|处理|跳转/.test(status)) dot.classList.add('run');
+        else if (status === '已全部完成') dot.classList.add('done');
+        else if (/错误|异常/.test(status)) dot.classList.add('err');
+        else dot.classList.add('wait');
+    }
+}
+
+
+function openSettingsDialog() {
+    if (_settingDialogOpen) return;
+    _settingDialogOpen = true;
+    if (typeof layui === 'undefined') {
+        _settingDialogOpen = false;
+        const v = prompt('请输入倍速（如 1.5 / 2 / 3）：', GM_getValue('SPEED', 2));
+        if (v !== null && !isNaN(parseFloat(v))) { GM_setValue('SPEED', parseFloat(v)); alert('已设置，刷新页面生效'); }
+        return;
+    }
+    layui.use('layer', function() {
+        const layer = layui.layer;
+        const curSpeed = GM_getValue('SPEED', 2);
+        const curForce = GM_getValue('FORCE_SPEED', false);
+        const confirmed = GM_getValue('XXT_CONFIRMED', false);
+        layer.open({
+            type: 1,
+            title: '⚙ 脚本设置',
+            area: ['340px', 'auto'],
+            skin: 'xxt-layer',
+            content: `
+                <div style="padding:20px 20px 12px;font-family:'微软雅黑',sans-serif;font-size:13px">
+                    <div style="margin-bottom:18px">
+                        <div style="color:#555;margin-bottom:10px;font-weight:600">播放倍速</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                            ${[1, 1.25, 1.5, 2, 3].map(s =>
+                                `<button onclick="document.getElementById('xxt-sv').value=${s};[...document.querySelectorAll('.xxt-spd-q')].forEach(b=>b.style.background='#f5f5f5');this.style.background='#e0f2f1'"
+                                    class="xxt-spd-q"
+                                    style="padding:5px 13px;border:1px solid #ddd;border-radius:5px;cursor:pointer;background:${s==curSpeed?'#e0f2f1':'#f5f5f5'};font-size:13px;color:#333;transition:background .2s">${s}x</button>`
+                            ).join('')}
+                        </div>
+                        <input id="xxt-sv" type="number" value="${curSpeed}" min="0.5" max="16" step="0.25"
+                            style="width:100%;height:34px;border:1px solid #e0e0e0;border-radius:5px;padding:0 10px;font-size:13px;box-sizing:border-box;outline:none">
+                    </div>
+                    <div style="margin-bottom:16px">
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:#555;font-weight:600">
+                            <input type="checkbox" id="xxt-fc" ${curForce ? 'checked' : ''} style="width:15px;height:15px;accent-color:#00897b;cursor:pointer">
+                            强制锁定倍速
+                        </label>
+                        <div style="color:#aaa;font-size:12px;margin-top:5px;padding-left:25px">开启后会拦截平台重置倍速的操作</div>
+                    </div>
+                    <div style="border-top:1px solid #f0f0f0;padding-top:12px;display:flex;justify-content:space-between;align-items:center">
+                        <span style="color:#bbb;font-size:12px">修改设置后需刷新页面生效</span>
+                        ${confirmed ? `<span id="xxt-reset-confirm" style="color:#ff9800;font-size:12px;cursor:pointer;text-decoration:underline">重置启动授权</span>` : ''}
+                    </div>
+                </div>
+            `,
+            btn: ['保存设置', '取消'],
+            yes: function(idx) {
+                const v = document.getElementById('xxt-sv').value;
+                const fc = document.getElementById('xxt-fc').checked;
+                if (v && !isNaN(parseFloat(v)) && parseFloat(v) > 0) {
+                    GM_setValue('SPEED', parseFloat(v));
+                }
+                GM_setValue('FORCE_SPEED', fc);
+                layer.close(idx);
+                layer.msg('设置已保存，刷新页面后生效', { icon: 1, time: 2000 });
+                const speedEl = document.getElementById('xxt-speed');
+                if (speedEl) speedEl.textContent = parseFloat(v) + 'x' + (fc ? ' (强制)' : '');
+            },
+            end: function() { _settingDialogOpen = false; }
+        });
+        // 重置授权点击
+        setTimeout(() => {
+            const resetBtn = document.getElementById('xxt-reset-confirm');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function() {
+                    GM_setValue('XXT_CONFIRMED', false);
+                    layer.msg('授权已重置，下次打开页面将重新显示确认框', { icon: 6, time: 2500 });
+                    this.textContent = '已重置 ✓';
+                    this.style.color = '#aaa';
+                    this.style.pointerEvents = 'none';
+                });
+            }
+        }, 100);
+    });
+}
+
+// ========== Layui UI 面板结束 ==========
+
+function startScriptWithMask(mainFunc) { // 启动脚本，已授权则直接运行，否则显示确认对话框
+    // 已授权过则跳过确认，直接运行
+    if (GM_getValue('XXT_CONFIRMED', false)) {
+        updatePanelStatus('运行中');
         mainFunc();
+        return;
+    }
+    if (typeof layui === 'undefined') {
+        // Layui 未加载时回退到原始方案
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:99999;background:rgba(0,0,0,0);cursor:pointer';
+        document.body.appendChild(mask);
+        if (confirm('本脚本仅供学习交流使用, 请遵守相关法律法规。\n\n请先关闭浏览器的开发者工具, 点击确定后单击页面任意处以运行脚本。\n\n如果想停止脚本, 随时刷新页面即可。')) {
+            GM_setValue('XXT_CONFIRMED', true);
+        }
+        mask.addEventListener('click', function() {
+            document.body.removeChild(mask);
+            mainFunc();
+        });
+        return;
+    }
+    layui.use('layer', function() {
+        const layer = layui.layer;
+        layer.confirm(
+            '<div style="font-family:\'微软雅黑\',sans-serif;line-height:1.9;padding:4px 0">' +
+            '<div style="font-size:15px;font-weight:700;margin-bottom:8px">🚀 学习通一键全自动刷课助手</div>' +
+            '<div style="color:#666;font-size:13px">' +
+            '⚠ 本脚本仅供学习交流使用，请遵守相关法律法规<br>' +
+            '• 请先<b>关闭浏览器开发者工具</b>再启动<br>' +
+            '• 如需停止脚本，刷新页面即可<br>' +
+            '<span style="color:#aaa;font-size:12px">点击「开始运行」后将不再显示此提示</span>' +
+            '</div></div>',
+            {
+                title: '启动确认',
+                btn: ['开始运行', '取消'],
+                icon: 0,
+                area: '400px',
+                skin: 'xxt-layer'
+            },
+            function(index) {
+                layer.close(index);
+                GM_setValue('XXT_CONFIRMED', true);
+                updatePanelStatus('运行中');
+                mainFunc();
+            }
+        );
     });
 }
 
 function main() {
     console.log('脚本已启动, 开始刷课...');
-    
+    updatePanelStatus('运行中');
+
     const leftEl = document.querySelector(IFRAME_MAIN_FEATURE_CLASS);
     if (leftEl) {
         const leftObserver = new MutationObserver(() => {
@@ -1381,6 +1640,7 @@ window.addEventListener = new Proxy(window.addEventListener, {
 
 findCourseTree(); // 初始化课程树
 initializeTreeIndex();
+createStatusPanel(); // 创建 Layui 状态面板
 
 if (DEFAULT_SPEED_OPTION) {
     console.log('强制速度模式已开启,目前倍速为:', DEFAULT_SPEED);  
