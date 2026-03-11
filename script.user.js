@@ -1785,6 +1785,7 @@
         '<div style="text-align:center;padding:4px 0">' +
           '<div style="font-size:16px;font-weight:700;margin-bottom:10px">学习通一键全自动刷课助手</div>' +
           '<div style="color:#666;line-height:2">版本：1.2.2<br>作者：Memory2314<br>' +
+          '<a href="https://github.com/Memory2314/XuexitongJSFork" target="_blank" style="color:#00897b;font-size:12px">项目地址 GitHub</a><br>' +
           '<span style="color:#f44336;font-size:12px">⚠ 仅供学习交流，请遵守相关法律法规</span></div></div>',
         "关于",
       );
