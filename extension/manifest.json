@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "XuexitongJSFork 学习通一键全自动刷课",
+  "version": "1.0",
+  "description": "自动识别课程树结构、自动播放视频、自动回答互动题目、自动切换倍速、自动检测PDF并翻页。注意事项：目前单一章节只识别第一个视频/PDF元素；对非视频/PDF类型课程会尝试直接跳过。",
+  "author": "Memory2314",
+  "permissions": ["storage"],
+  "web_accessible_resources": [
+    {
+      "resources": ["layui/font/*"],
+      "matches": [
+        "*://mooc1.chaoxing.com/*",
+        "*://mooc2.chaoxing.com/*",
+        "*://i.chaoxing.com/*",
+        "*://*.chaoxing.com/*"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://mooc1.chaoxing.com/mycourse/studentstudy*",
+        "*://mooc2.chaoxing.com/mycourse/studentstudy*",
+        "*://i.chaoxing.com/base*",
+        "*://*.chaoxing.com/mycourse/studentstudy*"
+      ],
+      "js": ["layui/layui.js", "content.js"],
+      "css": ["layui/css/layui.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
