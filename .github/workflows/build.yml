@@ -3,17 +3,13 @@ permissions: write-all
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Tag version to release (e.g. v1.0.1)'
-        required: false
   push:
     branches:
       - main
     tags:
       - v*
     paths:
-      - 'extension/**'
+      - "extension/**"
 
 jobs:
   build:
@@ -29,9 +25,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [ "${{ github.event.inputs.version }}" != "" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           else
             SHORT=$(git rev-parse --short HEAD)
@@ -51,7 +45,8 @@ jobs:
 
   pre-release:
     if: |
-      github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) ||
+      github.event_name == 'workflow_dispatch'
     needs: [build]
     runs-on: ubuntu-latest
     steps:
@@ -94,9 +89,7 @@ jobs:
           prerelease: true
 
   release:
-    if: |
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build]
     runs-on: ubuntu-latest
     steps:
