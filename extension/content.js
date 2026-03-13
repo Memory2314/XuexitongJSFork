@@ -85,6 +85,7 @@
 
     const PDF_IFRAME_ID = "panView";
     const PDF_DOC_FEATURE_CLASS = "insertdoc-online-pdf";
+    const PPT_DOC_FEATURE_CLASS = "insertdoc-online-ppt";
 
     const AUDIO_IFRAME_FEATURE_CLASS = "ans-insertaudio";
     const AUDIO_PLAYER_ID = "audio";
@@ -364,6 +365,8 @@
           Type = "Video";
         } else if (innerIframe.classList.contains(PDF_DOC_FEATURE_CLASS)) {
           Type = "Pdf";
+        } else if (innerIframe.classList.contains(PPT_DOC_FEATURE_CLASS)) {
+          Type = "Ppt";
         } else if (innerIframe.classList.contains(AUDIO_IFRAME_FEATURE_CLASS)) {
           Type = "Audio";
         } else if (innerIframe.src?.includes("/ananas/modules/work/")) {
@@ -1181,6 +1184,38 @@
                                   console.log("章节处理完毕");
                                   resolve();
                                 },
+                              );
+                            });
+                          } else if (Type === "Ppt") {
+                            console.log("该章节为PPT,进行参数捕获（PPT转PDF需要时间）");
+                            await new Promise((resolve) => {
+                              if (thirdLayerCancel) thirdLayerCancel();
+                              // PPT 需要等待服务端转换，maxTry 设为默认的 6 倍
+                              thirdLayerCancel = waitForElement(
+                                () => findPdfElement(innerDoc),
+                                async ({ pdfHtml } = {}) => {
+                                  if (!pdfHtml) {
+                                    console.error("PPT请求超时, 请检查网络或与作者联系");
+                                    resolve();
+                                    return;
+                                  }
+                                  let toBottom = false;
+                                  if (AUTO_PDF) {
+                                    toBottom = await scrollPdfToBottom(pdfHtml);
+                                  }
+                                  if (toBottom) {
+                                    console.log("PPT滚动成功！");
+                                  } else if (AUTO_PDF) {
+                                    console.warn("PPT多次滚动无效，可能页面未加载完全");
+                                  } else {
+                                    console.log("自动翻页PDF已关闭，跳过PPT滚动");
+                                  }
+                                  await timeSleep(2 * DEFAULT_SLEEP_TIME);
+                                  console.log("章节处理完毕");
+                                  resolve();
+                                },
+                                DEFAULT_INTERVAL_TIME,
+                                DEFAULT_TRY_COUNT * 6,
                               );
                             });
                           } else if (Type === "Audio") {
