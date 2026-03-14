@@ -15,7 +15,7 @@
 // @run-at       document-idle
 // @updateURL    https://raw.githubusercontent.com/Memory2314/XuexitongJSFork/main/script.meta.js
 // @downloadURL  https://raw.githubusercontent.com/Memory2314/XuexitongJSFork/main/script.user.js
-// @require      https://cdn.jsdelivr.net/npm/layui@2.13.4/dist/layui.js
+// @require      https://unpkg.com/layui@2.13.4/dist/layui.js
 // ==/UserScript==
 
 (function () {
@@ -1711,8 +1711,7 @@
     if (!document.querySelector('link[href*="layui"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href =
-        "https://cdn.jsdelivr.net/npm/layui@2.13.4/dist/css/layui.css";
+      link.href = "https://unpkg.com/layui@2.13.4/dist/css/layui.css";
       document.head.appendChild(link);
     }
     const style = document.createElement("style");
