@@ -23,6 +23,7 @@
     SPEED: 2,
     AUTO_MUTE: true,
     AUTO_ANSWER: true,
+    SKIP_WORK: false,
     AUTO_PDF: true,
     AUTO_AUDIO: true,
     XXT_CONFIRMED: false,
@@ -48,6 +49,7 @@
     const DEFAULT_SPEED = settings.SPEED;
     let AUTO_MUTE = settings.AUTO_MUTE;
     let AUTO_ANSWER = settings.AUTO_ANSWER;
+    let SKIP_WORK = settings.SKIP_WORK;
     let AUTO_PDF = settings.AUTO_PDF;
     let AUTO_AUDIO = settings.AUTO_AUDIO;
 
@@ -1242,6 +1244,10 @@
                               });
                             }
                           } else if (Type === "Work") {
+                            if (SKIP_WORK && prama !== 2) {
+                              console.log("已开启跳过测验，跳过本次答题");
+                              continue;
+                            }
                             console.log("该章节为WORK,进行参数捕获");
                             await new Promise((resolve) => {
                               if (thirdLayerCancel) thirdLayerCancel();
@@ -1498,6 +1504,15 @@
                 </span>
             </div>
             <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">跳过测验</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-skipwork-switch" ${SKIP_WORK ? "checked" : ""}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
+            <div class="xxt-row" style="align-items:center">
                 <span class="xxt-lbl">PDF翻页</span>
                 <span class="xxt-val">
                     <label class="xxt-switch">
@@ -1574,7 +1589,7 @@
             "确定重置所有配置？",
             { title: "重置配置", btn: ["确定", "取消"], skin: "xxt-layer" },
             function (idx) {
-              ["FORCE_SPEED", "SPEED", "AUTO_MUTE", "AUTO_ANSWER", "AUTO_PDF", "AUTO_AUDIO", "XXT_CONFIRMED"].forEach(
+              ["FORCE_SPEED", "SPEED", "AUTO_MUTE", "AUTO_ANSWER", "SKIP_WORK", "AUTO_PDF", "AUTO_AUDIO", "XXT_CONFIRMED"].forEach(
                 (k) => xxtDelete(k),
               );
               layui.layer.close(idx);
@@ -1599,6 +1614,12 @@
         AUTO_ANSWER = this.checked;
         xxtSet("AUTO_ANSWER", AUTO_ANSWER);
         xxtNotify("自动答题已" + (AUTO_ANSWER ? "开启" : "关闭"), 1);
+      });
+
+      el.querySelector("#xxt-skipwork-switch").addEventListener("change", function () {
+        SKIP_WORK = this.checked;
+        xxtSet("SKIP_WORK", SKIP_WORK);
+        xxtNotify("跳过测验已" + (SKIP_WORK ? "开启" : "关闭"), 1);
       });
 
       el.querySelector("#xxt-pdf-switch").addEventListener("change", function () {
