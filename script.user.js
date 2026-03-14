@@ -29,7 +29,7 @@
   let AUTO_MUTE = GM_getValue("AUTO_MUTE", true);
   let AUTO_ANSWER = GM_getValue("AUTO_ANSWER", true);
   let SKIP_WORK = GM_getValue("SKIP_WORK", false);
-  let AUTO_PDF = GM_getValue("AUTO_PDF", true);
+  let AUTO_DOCS = GM_getValue("AUTO_DOCS", true);
   let AUTO_AUDIO = GM_getValue("AUTO_AUDIO", true);
 
   GM_registerMenuCommand("设置倍速", function () {
@@ -61,12 +61,12 @@
     if (el) el.checked = SKIP_WORK;
     xxtNotify("跳过测验已" + (SKIP_WORK ? "开启" : "关闭"), 1);
   });
-  GM_registerMenuCommand("切换自动翻页PDF", function () {
-    AUTO_PDF = !AUTO_PDF;
-    GM_setValue("AUTO_PDF", AUTO_PDF);
-    const el = document.getElementById("xxt-pdf-switch");
-    if (el) el.checked = AUTO_PDF;
-    xxtNotify("自动翻页PDF已" + (AUTO_PDF ? "开启" : "关闭"), 1);
+  GM_registerMenuCommand("切换自动阅读", function () {
+    AUTO_DOCS = !AUTO_DOCS;
+    GM_setValue("AUTO_DOCS", AUTO_DOCS);
+    const el = document.getElementById("xxt-docs-switch");
+    if (el) el.checked = AUTO_DOCS;
+    xxtNotify("自动阅读已" + (AUTO_DOCS ? "开启" : "关闭"), 1);
   });
   GM_registerMenuCommand("切换自动播放音频", function () {
     AUTO_AUDIO = !AUTO_AUDIO;
@@ -951,30 +951,6 @@
     return { pdfHtml };
   }
 
-  function scrollPdfToBottom(
-    pdfHtml,
-    maxTries = Math.floor(DEFAULT_TRY_COUNT / 10),
-  ) {
-    return new Promise(async (resolve) => {
-      let lastTop = pdfHtml.scrollTop;
-      let tries = 0;
-      while (tries < maxTries) {
-        pdfHtml.scrollTo({
-          top: pdfHtml.scrollHeight,
-          behavior: "smooth",
-        });
-        await timeSleep(4 * DEFAULT_SLEEP_TIME); // 等待滚动动画
-        if (pdfHtml.scrollTop !== lastTop && pdfHtml.scrollTop > 0) {
-          resolve(true); // 滚动成功
-          return;
-        }
-        lastTop = pdfHtml.scrollTop;
-        tries++;
-      }
-      resolve(false); // 多次尝试后仍未滚动
-    });
-  }
-
   function findWorkElement(innerDoc) {
     const testIframe = innerDoc.getElementById("frame_content");
     if (!testIframe) {
@@ -1436,81 +1412,66 @@
                               },
                             );
                           });
-                        } else if (Type === "Pdf") {
-                          console.log("该章节为PDF,进行参数捕获");
+                        } else if (Type === "Pdf" || Type === "Ppt") {
+                          if (!AUTO_DOCS) {
+                            console.log("自动阅读已关闭，跳过");
+                          } else {
+                          console.log(`该章节为${Type},进行自动阅读`);
                           await new Promise((resolve) => {
-                            if (thirdLayerCancel) thirdLayerCancel();
-                            thirdLayerCancel = waitForElement(
-                              () => {
-                                return findPdfElement(innerDoc);
-                              },
-                              async ({ pdfHtml } = {}) => {
-                                if (!pdfHtml) {
-                                  console.error(
-                                    "请求超时, 请检查网络或与作者联系",
-                                  );
-                                  resolve();
-                                  return;
-                                }
-                                let toBottom = false;
-                                if (AUTO_PDF) {
-                                  toBottom = await scrollPdfToBottom(pdfHtml);
-                                }
-                                if (toBottom) {
-                                  console.log("PDF滚动成功！");
-                                } else if (AUTO_PDF) {
-                                  console.warn(
-                                    "PDF多次滚动无效，可能页面未加载完全",
-                                  );
-                                } else {
-                                  console.log("自动翻页PDF已关闭，跳过滚动");
-                                }
-                                await timeSleep(2 * DEFAULT_SLEEP_TIME);
-                                console.log("章节处理完毕");
+                            let resolved = false;
+                            function safeResolve() {
+                              if (!resolved) {
+                                resolved = true;
                                 resolve();
-                              },
-                            );
-                          });
-                        } else if (Type === "Ppt") {
-                          console.log(
-                            "该章节为PPT,进行参数捕获(PPT转PDF需要时间)",
-                          );
-                          await new Promise((resolve) => {
+                              }
+                            }
+                            // 监听容器 ans-job-finished，完成时立即退出
+                            let docObserver = null;
+                            if (container) {
+                              docObserver = new MutationObserver(() => {
+                                if (container.classList.contains("ans-job-finished")) {
+                                  console.log(`${Type}任务点已完成，停止等待`);
+                                  docObserver.disconnect();
+                                  safeResolve();
+                                }
+                              });
+                              docObserver.observe(container, {
+                                attributes: true,
+                                attributeFilter: ["class"],
+                              });
+                            }
                             if (thirdLayerCancel) thirdLayerCancel();
                             // PPT 需要等待服务端转换，maxTry 设为默认的 6 倍
                             thirdLayerCancel = waitForElement(
-                              () => {
-                                return findPdfElement(innerDoc);
-                              },
+                              () => findPdfElement(innerDoc),
                               async ({ pdfHtml } = {}) => {
                                 if (!pdfHtml) {
                                   console.error(
-                                    "PPT请求超时, 请检查网络或与作者联系",
+                                    `${Type}请求超时, 请检查网络或与作者联系`,
                                   );
-                                  resolve();
+                                  docObserver?.disconnect();
+                                  safeResolve();
                                   return;
                                 }
-                                let toBottom = false;
-                                if (AUTO_PDF) {
-                                  toBottom = await scrollPdfToBottom(pdfHtml);
-                                }
-                                if (toBottom) {
-                                  console.log("PPT滚动成功！");
-                                } else if (AUTO_PDF) {
-                                  console.warn(
-                                    "PPT多次滚动无效，可能页面未加载完全",
-                                  );
+                                // 调用平台内部完成方法
+                                const docWin = innerDoc.defaultView;
+                                if (typeof docWin?.finishJob === "function") {
+                                  console.log(`${Type}: 调用平台 finishJob()`);
+                                  docWin.finishJob();
+                                } else if (typeof docWin?.greenligth === "function") {
+                                  console.log(`${Type}: 调用平台 greenligth()`);
+                                  docWin.greenligth();
                                 } else {
-                                  console.log("自动翻页PDF已关闭，跳过PPT滚动");
+                                  console.warn(`${Type}: 未找到平台完成方法，强制跳过`);
+                                  docObserver?.disconnect();
+                                  safeResolve();
                                 }
-                                await timeSleep(2 * DEFAULT_SLEEP_TIME);
-                                console.log("章节处理完毕");
-                                resolve();
                               },
                               DEFAULT_INTERVAL_TIME,
                               DEFAULT_TRY_COUNT * 6,
                             );
                           });
+                          }
                         } else if (Type === "Audio") {
                           console.log("该章节为AUDIO,进行参数捕获");
                           if (!AUTO_AUDIO) {
@@ -1864,10 +1825,10 @@
                 </span>
             </div>
             <div class="xxt-row" style="align-items:center">
-                <span class="xxt-lbl">PDF翻页</span>
+                <span class="xxt-lbl">自动阅读</span>
                 <span class="xxt-val">
                     <label class="xxt-switch">
-                        <input type="checkbox" id="xxt-pdf-switch" ${AUTO_PDF ? "checked" : ""}>
+                        <input type="checkbox" id="xxt-docs-switch" ${AUTO_DOCS ? "checked" : ""}>
                         <span class="xxt-switch-slider"></span>
                     </label>
                 </span>
@@ -1949,7 +1910,7 @@
               "AUTO_MUTE",
               "AUTO_ANSWER",
               "SKIP_WORK",
-              "AUTO_PDF",
+              "AUTO_DOCS",
               "AUTO_AUDIO",
               "XXT_CONFIRMED",
             ].forEach(GM_deleteValue);
@@ -1998,10 +1959,10 @@
       },
     );
 
-    el.querySelector("#xxt-pdf-switch").addEventListener("change", function () {
-      AUTO_PDF = this.checked;
-      GM_setValue("AUTO_PDF", AUTO_PDF);
-      xxtNotify("自动翻页PDF已" + (AUTO_PDF ? "开启" : "关闭"), 1);
+    el.querySelector("#xxt-docs-switch").addEventListener("change", function () {
+      AUTO_DOCS = this.checked;
+      GM_setValue("AUTO_DOCS", AUTO_DOCS);
+      xxtNotify("自动阅读已" + (AUTO_DOCS ? "开启" : "关闭"), 1);
     });
 
     el.querySelector("#xxt-audio-switch").addEventListener(
