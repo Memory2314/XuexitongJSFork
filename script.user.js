@@ -278,7 +278,7 @@
       throw new Error("元素缺失, 已终止");
     }
 
-    findCourseTree(); //由于此时课程树有元素变化（主要是COURSE_TREE_NODE_CURRENT_FEATURE_CLASS），需要刷新
+    findCourseTree(); //由于此时课程树有元素变化(主要是COURSE_TREE_NODE_CURRENT_FEATURE_CLASS)，需要刷新
     let currentTitle = initializeTreeIndex();
     let nextCourseNode = nextCourse();
     let skippedCount = 0;
@@ -437,7 +437,9 @@
         console.warn("[备用] 跨域, 无法访问 iframe 内容");
         return null;
       }
-      result.push({ innerDoc, Type });
+      const container = innerIframe.closest(".ans-attach-ct") || innerIframe.parentElement;
+      const isFinished = container?.classList.contains("ans-job-finished") ?? false;
+      result.push({ innerDoc, Type, isFinished, container });
     });
     if (result.length === 0) {
       console.log("[调试] 尝试检测测验题目");
@@ -738,7 +740,7 @@
         resolve(true);
       });
 
-      // 等待元数据加载（duration 可用）
+      // 等待元数据加载(duration 可用)
       async function waitForDuration() {
         if (audioEl.readyState >= 1 && audioEl.duration > 0) return;
         await new Promise((r) => {
@@ -1261,7 +1263,7 @@
     }
     handleIframeLock = true;
 
-    // 唯一性控制，防止异步出bug（事实上确实会出很多bug）
+    // 唯一性控制，防止异步出bug(事实上确实会出很多bug)
     let firstLayerCancel = null;
     let secondLayerCancel = null;
     let thirdLayerCancel = null;
@@ -1357,22 +1359,47 @@
                   const needSkip = outerDoc.querySelectorAll(".ans-job-icon");
                   let taskCount = 0;
                   async function runTasksSerially() {
-                    for (const { innerDoc, Type } of InnerDocs) {
+                    for (const { innerDoc, Type, isFinished, container } of InnerDocs) {
                       // for...of 防错乱
                       console.log(`处理 ${Type} 任务点...`);
                       try {
-                        if (taskCount >= needSkip.length) {
+                        if (isFinished) {
+                          console.log("任务点已完成(ans-job-finished)，跳过");
+                          if (Type === "Work") prama = 0;
+                        } else if (taskCount >= needSkip.length) {
                           console.log("已处理完所有任务点，准备跳转到下一章节");
                           if (Type === "Work") prama = 0;
                         } else if (
                           needSkip[taskCount].getAttribute("aria-label") ===
                           "任务点已完成"
                         ) {
-                          console.log("任务点已完成，跳过");
+                          console.log("任务点已完成(aria-label)，跳过");
                           if (Type === "Work") prama = 0;
                         } else if (Type === "Video") {
                           console.log("该章节为VIDEO,进行参数捕获");
                           await new Promise((resolve) => {
+                            let resolved = false;
+                            function safeResolve() {
+                              if (!resolved) {
+                                resolved = true;
+                                resolve();
+                              }
+                            }
+                            // 监听容器 ans-job-finished，中途完成时提前退出
+                            let containerObserver = null;
+                            if (container) {
+                              containerObserver = new MutationObserver(() => {
+                                if (container.classList.contains("ans-job-finished")) {
+                                  console.log("视频任务点中途已完成，提前退出");
+                                  containerObserver.disconnect();
+                                  safeResolve();
+                                }
+                              });
+                              containerObserver.observe(container, {
+                                attributes: true,
+                                attributeFilter: ["class"],
+                              });
+                            }
                             if (FourthLayerCancel) FourthLayerCancel();
                             FourthLayerCancel = waitForElement(
                               () => {
@@ -1383,7 +1410,8 @@
                               async (innerParam) => {
                                 if (!innerParam) {
                                   console.warn("页面异常加载，尝试跳过");
-                                  resolve();
+                                  containerObserver?.disconnect();
+                                  safeResolve();
                                   return;
                                 }
                                 const {
@@ -1403,7 +1431,8 @@
                                   paceList,
                                   muteBtn,
                                 );
-                                resolve();
+                                containerObserver?.disconnect();
+                                safeResolve();
                               },
                             );
                           });
@@ -1444,7 +1473,7 @@
                           });
                         } else if (Type === "Ppt") {
                           console.log(
-                            "该章节为PPT,进行参数捕获（PPT转PDF需要时间）",
+                            "该章节为PPT,进行参数捕获(PPT转PDF需要时间)",
                           );
                           await new Promise((resolve) => {
                             if (thirdLayerCancel) thirdLayerCancel();
@@ -2033,7 +2062,7 @@
     if (typeof layui === "undefined") {
       _settingDialogOpen = false;
       const v = prompt(
-        "请输入倍速（如 1.5 / 2 / 3）：",
+        "请输入倍速(如 1.5 / 2 / 3)：",
         GM_getValue("SPEED", 2),
       );
       if (v !== null && !isNaN(parseFloat(v))) {
