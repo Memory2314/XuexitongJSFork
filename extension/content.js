@@ -44,7 +44,7 @@
       chrome.storage.local.remove(key);
     }
 
-    // 读取配置（已由 chrome.storage 预加载到 settings 对象）
+    // 读取配置(已由 chrome.storage 预加载到 settings 对象)
     const DEFAULT_SPEED_OPTION = settings.FORCE_SPEED;
     const DEFAULT_SPEED = settings.SPEED;
     let AUTO_MUTE = settings.AUTO_MUTE;
@@ -391,7 +391,9 @@
           console.warn("[备用] 跨域, 无法访问 iframe 内容");
           return null;
         }
-        result.push({ innerDoc, Type });
+        const container = innerIframe.closest(".ans-attach-ct") || innerIframe.parentElement;
+        const isFinished = container?.classList.contains("ans-job-finished") ?? false;
+        result.push({ innerDoc, Type, isFinished, container });
       });
       if (result.length === 0) {
         console.log("[调试] 尝试检测测验题目");
@@ -1126,20 +1128,45 @@
                     const needSkip = outerDoc.querySelectorAll(".ans-job-icon");
                     let taskCount = 0;
                     async function runTasksSerially() {
-                      for (const { innerDoc, Type } of InnerDocs) {
+                      for (const { innerDoc, Type, isFinished, container } of InnerDocs) {
                         console.log(`处理 ${Type} 任务点...`);
                         try {
-                          if (taskCount >= needSkip.length) {
+                          if (isFinished) {
+                            console.log("任务点已完成(ans-job-finished)，跳过");
+                            if (Type === "Work") prama = 0;
+                          } else if (taskCount >= needSkip.length) {
                             console.log("已处理完所有任务点，准备跳转到下一章节");
                             if (Type === "Work") prama = 0;
                           } else if (
                             needSkip[taskCount].getAttribute("aria-label") === "任务点已完成"
                           ) {
-                            console.log("任务点已完成，跳过");
+                            console.log("任务点已完成(aria-label)，跳过");
                             if (Type === "Work") prama = 0;
                           } else if (Type === "Video") {
                             console.log("该章节为VIDEO,进行参数捕获");
                             await new Promise((resolve) => {
+                              let resolved = false;
+                              function safeResolve() {
+                                if (!resolved) {
+                                  resolved = true;
+                                  resolve();
+                                }
+                              }
+                              // 监听容器 ans-job-finished，中途完成时提前退出
+                              let containerObserver = null;
+                              if (container) {
+                                containerObserver = new MutationObserver(() => {
+                                  if (container.classList.contains("ans-job-finished")) {
+                                    console.log("视频任务点中途已完成，提前退出");
+                                    containerObserver.disconnect();
+                                    safeResolve();
+                                  }
+                                });
+                                containerObserver.observe(container, {
+                                  attributes: true,
+                                  attributeFilter: ["class"],
+                                });
+                              }
                               if (FourthLayerCancel) FourthLayerCancel();
                               FourthLayerCancel = waitForElement(
                                 () => {
@@ -1150,12 +1177,14 @@
                                 async (innerParam) => {
                                   if (!innerParam) {
                                     console.warn("页面异常加载，尝试跳过");
-                                    resolve();
+                                    containerObserver?.disconnect();
+                                    safeResolve();
                                     return;
                                   }
                                   const { videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn } = innerParam;
                                   await autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn);
-                                  resolve();
+                                  containerObserver?.disconnect();
+                                  safeResolve();
                                 },
                               );
                             });
@@ -1189,7 +1218,7 @@
                               );
                             });
                           } else if (Type === "Ppt") {
-                            console.log("该章节为PPT,进行参数捕获（PPT转PDF需要时间）");
+                            console.log("该章节为PPT,进行参数捕获(PPT转PDF需要时间)");
                             await new Promise((resolve) => {
                               if (thirdLayerCancel) thirdLayerCancel();
                               // PPT 需要等待服务端转换，maxTry 设为默认的 6 倍
@@ -1682,7 +1711,7 @@
       _settingDialogOpen = true;
       if (typeof layui === "undefined") {
         _settingDialogOpen = false;
-        const v = prompt("请输入倍速（如 1.5 / 2 / 3）：", settings.SPEED);
+        const v = prompt("请输入倍速(如 1.5 / 2 / 3)：", settings.SPEED);
         if (v !== null && !isNaN(parseFloat(v))) {
           xxtSet("SPEED", parseFloat(v));
           alert("已设置，刷新页面生效");
