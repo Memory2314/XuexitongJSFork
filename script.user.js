@@ -31,6 +31,7 @@
   let SKIP_WORK = GM_getValue("SKIP_WORK", false);
   let AUTO_DOCS = GM_getValue("AUTO_DOCS", true);
   let AUTO_AUDIO = GM_getValue("AUTO_AUDIO", true);
+  let AUTO_FASTFORWARD = GM_getValue("AUTO_FASTFORWARD", false);
 
   GM_registerMenuCommand("设置倍速", function () {
     openSettingsDialog();
@@ -74,6 +75,13 @@
     const el = document.getElementById("xxt-audio-switch");
     if (el) el.checked = AUTO_AUDIO;
     xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 2);
+  });
+  GM_registerMenuCommand("切换视频秒杀", function () {
+    AUTO_FASTFORWARD = !AUTO_FASTFORWARD;
+    GM_setValue("AUTO_FASTFORWARD", AUTO_FASTFORWARD);
+    const el = document.getElementById("xxt-fastforward-switch");
+    if (el) el.checked = AUTO_FASTFORWARD;
+    xxtNotify("视频秒杀已" + (AUTO_FASTFORWARD ? "开启" : "关闭"), 2);
   });
 
   console.log("强制倍速选项:", DEFAULT_SPEED_OPTION);
@@ -439,7 +447,8 @@
       }
       const container = innerIframe.closest(".ans-attach-ct") || innerIframe.parentElement;
       const isFinished = container?.classList.contains("ans-job-finished") ?? false;
-      result.push({ innerDoc, Type, isFinished, container });
+      const canFastForward = innerIframe.getAttribute("fastforward") === "";
+      result.push({ innerDoc, Type, isFinished, container, canFastForward });
     });
     if (result.length === 0) {
       console.log("[调试] 尝试检测测验题目");
@@ -725,60 +734,30 @@
     return { audioDiv, audioEl, playControlBtn };
   }
 
-  async function autoPlayAudio(audioDiv, audioEl, playControlBtn) {
+  // 通用：静音播放媒体元素后跳到末尾（视频快进秒杀 / 音频秒杀 共用）
+  async function seekMediaToEnd(container, mediaEl, fallbackBtn) {
+    if (!container || !mediaEl) return false;
+    if (container.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) return true;
     return new Promise(async (resolve) => {
-      if (!audioDiv || !audioEl) {
-        resolve(false);
-        return;
+      mediaEl.addEventListener("ended", () => resolve(true), { once: true });
+      if (mediaEl.readyState < 1) {
+        await new Promise((r) =>
+          mediaEl.addEventListener("loadedmetadata", r, { once: true }),
+        );
       }
-      if (audioDiv.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) {
-        resolve(true);
-        return;
-      }
-      audioEl.addEventListener("ended", function handler() {
-        audioEl.removeEventListener("ended", handler);
-        resolve(true);
-      });
-
-      // 等待元数据加载(duration 可用)
-      async function waitForDuration() {
-        if (audioEl.readyState >= 1 && audioEl.duration > 0) return;
-        await new Promise((r) => {
-          if (audioEl.readyState >= 1) {
-            r();
-            return;
-          }
-          audioEl.addEventListener("loadedmetadata", r, { once: true });
-        });
-      }
-
-      // 先尝试静音播放绕过自动播放策略，再跳到结尾
-      audioEl.muted = true;
+      mediaEl.muted = true;
       try {
-        await audioEl.play();
-        await waitForDuration();
-        if (audioEl.duration > 0 && !isNaN(audioEl.duration)) {
-          audioEl.currentTime = audioEl.duration - 0.1;
-        }
-        return;
-      } catch (e) {
-        console.warn("音频静音自动播放失败，回退到点击播放按钮", e);
+        await mediaEl.play();
+      } catch {
+        if (fallbackBtn) fallbackBtn.click();
       }
-
-      // 回退：点击播放按钮
-      if (playControlBtn) playControlBtn.click();
       for (let i = 0; i < DEFAULT_TRY_COUNT; i++) {
-        await timeSleep(DEFAULT_SLEEP_TIME);
-        if (
-          audioEl.duration > 0 &&
-          !isNaN(audioEl.duration) &&
-          !audioEl.paused
-        ) {
-          audioEl.currentTime = audioEl.duration - 0.1;
+        if (mediaEl.duration > 0 && !isNaN(mediaEl.duration)) {
+          mediaEl.currentTime = mediaEl.duration - 0.1;
           return;
         }
+        await timeSleep(DEFAULT_SLEEP_TIME);
       }
-      console.warn("音频未能正常播放，超时");
       resolve(false);
     });
   }
@@ -815,6 +794,7 @@
     playControlBtn,
     paceList,
     muteBtn,
+    canFastForward = false,
   ) {
     return new Promise((resolve) => {
       if (!videoDiv) {
@@ -823,6 +803,7 @@
         return;
       }
       let pauseFreeze = false;
+      let seekAttempted = false;
       console.log("debug successfully");
       let observer = null;
       const checkClass = () => {
@@ -909,7 +890,23 @@
             pauseFreeze = false; // 5秒后解除暂停冻结
           }, 10 * DEFAULT_SLEEP_TIME);
         } else {
-          console.log("视频正在播放中，继续检测");
+          if (AUTO_FASTFORWARD && canFastForward && !seekAttempted) {
+            seekAttempted = true;
+            const videoEl = videoDiv.querySelector("video");
+            const trySeek = () => {
+              if (videoEl?.duration > 0 && !isNaN(videoEl.duration)) {
+                console.log("检测到可快进，秒杀中...");
+                videoEl.currentTime = videoEl.duration - 0.1;
+              }
+            };
+            if (videoEl?.readyState >= 1) {
+              trySeek();
+            } else {
+              videoEl?.addEventListener("loadedmetadata", trySeek, { once: true });
+            }
+          } else {
+            console.log("视频正在播放中，继续检测");
+          }
         }
       };
       observer = new MutationObserver(checkClass);
@@ -1335,7 +1332,7 @@
                   const needSkip = outerDoc.querySelectorAll(".ans-job-icon");
                   let taskCount = 0;
                   async function runTasksSerially() {
-                    for (const { innerDoc, Type, isFinished, container } of InnerDocs) {
+                    for (const { innerDoc, Type, isFinished, container, canFastForward } of InnerDocs) {
                       // for...of 防错乱
                       console.log(`处理 ${Type} 任务点...`);
                       try {
@@ -1406,6 +1403,7 @@
                                   playControlBtn,
                                   paceList,
                                   muteBtn,
+                                  canFastForward,
                                 );
                                 containerObserver?.disconnect();
                                 safeResolve();
@@ -1489,11 +1487,7 @@
                                   }
                                   const { audioDiv, audioEl, playControlBtn } =
                                     innerParam;
-                                  await autoPlayAudio(
-                                    audioDiv,
-                                    audioEl,
-                                    playControlBtn,
-                                  );
+                                  await seekMediaToEnd(audioDiv, audioEl, playControlBtn);
                                   await timeSleep(DEFAULT_SLEEP_TIME);
                                   resolve();
                                 },
@@ -1842,6 +1836,15 @@
                     </label>
                 </span>
             </div>
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">视频秒杀</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-fastforward-switch" ${AUTO_FASTFORWARD ? "checked" : ""}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
         </div>
         <div class="xxt-ft">
             <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">关于</button>
@@ -1912,6 +1915,7 @@
               "SKIP_WORK",
               "AUTO_DOCS",
               "AUTO_AUDIO",
+              "AUTO_FASTFORWARD",
               "XXT_CONFIRMED",
             ].forEach(GM_deleteValue);
             layui.layer.close(idx);
@@ -1971,6 +1975,15 @@
         AUTO_AUDIO = this.checked;
         GM_setValue("AUTO_AUDIO", AUTO_AUDIO);
         xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 1);
+      },
+    );
+
+    el.querySelector("#xxt-fastforward-switch").addEventListener(
+      "change",
+      function () {
+        AUTO_FASTFORWARD = this.checked;
+        GM_setValue("AUTO_FASTFORWARD", AUTO_FASTFORWARD);
+        xxtNotify("视频秒杀已" + (AUTO_FASTFORWARD ? "开启" : "关闭"), 1);
       },
     );
 

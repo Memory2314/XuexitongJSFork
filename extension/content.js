@@ -26,6 +26,7 @@
     SKIP_WORK: false,
     AUTO_DOCS: true,
     AUTO_AUDIO: true,
+    AUTO_FASTFORWARD: false,
     XXT_CONFIRMED: false,
   };
 
@@ -52,6 +53,7 @@
     let SKIP_WORK = settings.SKIP_WORK;
     let AUTO_DOCS = settings.AUTO_DOCS;
     let AUTO_AUDIO = settings.AUTO_AUDIO;
+    let AUTO_FASTFORWARD = settings.AUTO_FASTFORWARD;
 
     console.log("强制倍速选项:", DEFAULT_SPEED_OPTION);
     console.log("默认倍速:", DEFAULT_SPEED);
@@ -393,7 +395,8 @@
         }
         const container = innerIframe.closest(".ans-attach-ct") || innerIframe.parentElement;
         const isFinished = container?.classList.contains("ans-job-finished") ?? false;
-        result.push({ innerDoc, Type, isFinished, container });
+        const canFastForward = innerIframe.getAttribute("fastforward") === "";
+        result.push({ innerDoc, Type, isFinished, container, canFastForward });
       });
       if (result.length === 0) {
         console.log("[调试] 尝试检测测验题目");
@@ -628,54 +631,6 @@
       return { audioDiv, audioEl, playControlBtn };
     }
 
-    async function autoPlayAudio(audioDiv, audioEl, playControlBtn) {
-      return new Promise(async (resolve) => {
-        if (!audioDiv || !audioEl) {
-          resolve(false);
-          return;
-        }
-        if (audioDiv.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) {
-          resolve(true);
-          return;
-        }
-        audioEl.addEventListener("ended", function handler() {
-          audioEl.removeEventListener("ended", handler);
-          resolve(true);
-        });
-        async function waitForDuration() {
-          if (audioEl.readyState >= 1 && audioEl.duration > 0) return;
-          await new Promise((r) => {
-            if (audioEl.readyState >= 1) {
-              r();
-              return;
-            }
-            audioEl.addEventListener("loadedmetadata", r, { once: true });
-          });
-        }
-        audioEl.muted = true;
-        try {
-          await audioEl.play();
-          await waitForDuration();
-          if (audioEl.duration > 0 && !isNaN(audioEl.duration)) {
-            audioEl.currentTime = audioEl.duration - 0.1;
-          }
-          return;
-        } catch (e) {
-          console.warn("音频静音自动播放失败，回退到点击播放按钮", e);
-        }
-        if (playControlBtn) playControlBtn.click();
-        for (let i = 0; i < DEFAULT_TRY_COUNT; i++) {
-          await timeSleep(DEFAULT_SLEEP_TIME);
-          if (audioEl.duration > 0 && !isNaN(audioEl.duration) && !audioEl.paused) {
-            audioEl.currentTime = audioEl.duration - 0.1;
-            return;
-          }
-        }
-        console.warn("音频未能正常播放，超时");
-        resolve(false);
-      });
-    }
-
     async function tryStartVideo(videoDiv, launchBtn, paceList, muteBtn) {
       let tryCount = 0;
       while (
@@ -700,7 +655,35 @@
       if (AUTO_MUTE) muteVideo(muteBtn);
     }
 
-    function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn) {
+    // 通用：静音播放媒体元素后跳到末尾（视频快进秒杀 / 音频秒杀 共用）
+    async function seekMediaToEnd(container, mediaEl, fallbackBtn) {
+      if (!container || !mediaEl) return false;
+      if (container.classList.contains(VIDEO_ENDED_FEATURE_CLASS)) return true;
+      return new Promise(async (resolve) => {
+        mediaEl.addEventListener("ended", () => resolve(true), { once: true });
+        if (mediaEl.readyState < 1) {
+          await new Promise((r) =>
+            mediaEl.addEventListener("loadedmetadata", r, { once: true }),
+          );
+        }
+        mediaEl.muted = true;
+        try {
+          await mediaEl.play();
+        } catch {
+          if (fallbackBtn) fallbackBtn.click();
+        }
+        for (let i = 0; i < DEFAULT_TRY_COUNT; i++) {
+          if (mediaEl.duration > 0 && !isNaN(mediaEl.duration)) {
+            mediaEl.currentTime = mediaEl.duration - 0.1;
+            return;
+          }
+          await timeSleep(DEFAULT_SLEEP_TIME);
+        }
+        resolve(false);
+      });
+    }
+
+    function autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn, canFastForward = false) {
       return new Promise((resolve) => {
         if (!videoDiv) {
           console.error("请求超时,请检查网络或与作者联系");
@@ -708,6 +691,7 @@
           return;
         }
         let pauseFreeze = false;
+        let seekAttempted = false;
         console.log("debug successfully");
         let observer = null;
         const checkClass = () => {
@@ -780,7 +764,23 @@
               pauseFreeze = false;
             }, 10 * DEFAULT_SLEEP_TIME);
           } else {
-            console.log("视频正在播放中，继续检测");
+            if (AUTO_FASTFORWARD && canFastForward && !seekAttempted) {
+              seekAttempted = true;
+              const videoEl = videoDiv.querySelector("video");
+              const trySeek = () => {
+                if (videoEl?.duration > 0 && !isNaN(videoEl.duration)) {
+                  console.log("检测到可快进，秒杀中...");
+                  videoEl.currentTime = videoEl.duration - 0.1;
+                }
+              };
+              if (videoEl?.readyState >= 1) {
+                trySeek();
+              } else {
+                videoEl?.addEventListener("loadedmetadata", trySeek, { once: true });
+              }
+            } else {
+              console.log("视频正在播放中，继续检测");
+            }
           }
         };
         observer = new MutationObserver(checkClass);
@@ -1110,7 +1110,7 @@
                     const needSkip = outerDoc.querySelectorAll(".ans-job-icon");
                     let taskCount = 0;
                     async function runTasksSerially() {
-                      for (const { innerDoc, Type, isFinished, container } of InnerDocs) {
+                      for (const { innerDoc, Type, isFinished, container, canFastForward } of InnerDocs) {
                         console.log(`处理 ${Type} 任务点...`);
                         try {
                           if (isFinished) {
@@ -1164,7 +1164,7 @@
                                     return;
                                   }
                                   const { videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn } = innerParam;
-                                  await autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn);
+                                  await autoPlayVideo(innerDoc, videoDiv, launchBtn, target, playControlBtn, paceList, muteBtn, canFastForward);
                                   containerObserver?.disconnect();
                                   safeResolve();
                                 },
@@ -1244,7 +1244,7 @@
                                       return;
                                     }
                                     const { audioDiv, audioEl, playControlBtn } = innerParam;
-                                    await autoPlayAudio(audioDiv, audioEl, playControlBtn);
+                                    await seekMediaToEnd(audioDiv, audioEl, playControlBtn);
                                     await timeSleep(DEFAULT_SLEEP_TIME);
                                     resolve();
                                   },
@@ -1538,6 +1538,15 @@
                     </label>
                 </span>
             </div>
+            <div class="xxt-row" style="align-items:center">
+                <span class="xxt-lbl">视频秒杀</span>
+                <span class="xxt-val">
+                    <label class="xxt-switch">
+                        <input type="checkbox" id="xxt-fastforward-switch" ${AUTO_FASTFORWARD ? "checked" : ""}>
+                        <span class="xxt-switch-slider"></span>
+                    </label>
+                </span>
+            </div>
         </div>
         <div class="xxt-ft">
             <button class="layui-btn layui-btn-sm layui-btn-normal" id="xxt-about-btn">关于</button>
@@ -1597,7 +1606,7 @@
             "确定重置所有配置？",
             { title: "重置配置", btn: ["确定", "取消"], skin: "xxt-layer" },
             function (idx) {
-              ["FORCE_SPEED", "SPEED", "AUTO_MUTE", "AUTO_ANSWER", "SKIP_WORK", "AUTO_DOCS", "AUTO_AUDIO", "XXT_CONFIRMED"].forEach(
+              ["FORCE_SPEED", "SPEED", "AUTO_MUTE", "AUTO_ANSWER", "SKIP_WORK", "AUTO_DOCS", "AUTO_AUDIO", "AUTO_FASTFORWARD", "XXT_CONFIRMED"].forEach(
                 (k) => xxtDelete(k),
               );
               layui.layer.close(idx);
@@ -1640,6 +1649,12 @@
         AUTO_AUDIO = this.checked;
         xxtSet("AUTO_AUDIO", AUTO_AUDIO);
         xxtNotify("自动播放音频已" + (AUTO_AUDIO ? "开启" : "关闭"), 1);
+      });
+
+      el.querySelector("#xxt-fastforward-switch").addEventListener("change", function () {
+        AUTO_FASTFORWARD = this.checked;
+        xxtSet("AUTO_FASTFORWARD", AUTO_FASTFORWARD);
+        xxtNotify("视频秒杀已" + (AUTO_FASTFORWARD ? "开启" : "关闭"), 1);
       });
 
       el.querySelector("#xxt-about-btn").addEventListener("click", function () {
